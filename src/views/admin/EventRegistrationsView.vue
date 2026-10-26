@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import WhatsAppComposer from '@/components/common/WhatsAppComposer.vue'
 import { useEventRegistrationStore } from '@/stores/eventRegistrations'
 import type {
   EventRegistrationStatus,
   EventRegistrationWithEvent,
 } from '@/types'
+import { isValidWhatsAppNumber } from '@/utils/whatsapp'
 
 const route = useRoute()
 const store = useEventRegistrationStore()
@@ -15,6 +17,7 @@ const registrationToDelete = ref<EventRegistrationWithEvent | null>(null)
 const deleteError = ref('')
 const toastMessage = ref('')
 const showToast = ref(false)
+const waComposer = ref<EventRegistrationWithEvent | null>(null)
 
 const filters: Array<{ value: EventRegistrationStatus | 'Semua'; label: string }> = [
   { value: 'Semua', label: 'Semua' },
@@ -105,25 +108,23 @@ function formatDateTime(value: string) {
   })} WIB`
 }
 
-function normalizeWhatsAppNumber(phone?: string) {
-  let digits = (phone ?? '').replace(/\D/g, '')
-  if (!digits) return ''
-  if (digits.startsWith('00')) digits = digits.slice(2)
-  if (digits.startsWith('620')) digits = `62${digits.slice(3)}`
-  if (digits.startsWith('62')) return digits
-  if (digits.startsWith('0')) return `62${digits.slice(1)}`
-  if (digits.startsWith('8')) return `62${digits}`
-  return digits
+function hasWhatsApp(registration: EventRegistrationWithEvent) {
+  return isValidWhatsAppNumber(registration.phone)
 }
 
-function whatsappUrl(registration: EventRegistrationWithEvent) {
-  const number = normalizeWhatsAppNumber(registration.phone)
-  if (!/^62\d{8,13}$/.test(number)) return ''
+function eventRegistrationMessage(registration: EventRegistrationWithEvent) {
   const eventTitle = registration.event?.title
-  const message = eventTitle
+  return eventTitle
     ? `Halo ${registration.name}, kami dari panitia agenda "${eventTitle}". Kami ingin mengonfirmasi pendaftaran Anda.`
     : `Halo ${registration.name}, kami dari panitia agenda. Kami ingin mengonfirmasi pendaftaran Anda.`
-  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`
+}
+
+function openWhatsApp(registration: EventRegistrationWithEvent) {
+  if (!hasWhatsApp(registration)) {
+    triggerToast('Nomor WhatsApp pendaftar belum tersedia atau tidak valid.')
+    return
+  }
+  waComposer.value = registration
 }
 
 function exportCsv() {
@@ -221,6 +222,10 @@ function setFilterFromRoute(value: unknown) {
 
 function handleKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
+  if (waComposer.value) {
+    waComposer.value = null
+    return
+  }
   if (registrationToDelete.value) {
     closeDeleteConfirm()
     return
@@ -230,8 +235,8 @@ function handleKeydown(event: KeyboardEvent) {
 
 watch(() => route.query.eventId, setFilterFromRoute)
 
-watch([detail, registrationToDelete], ([currentDetail, currentDelete]) => {
-  document.body.style.overflow = currentDetail || currentDelete ? 'hidden' : ''
+watch([detail, registrationToDelete, waComposer], ([currentDetail, currentDelete, currentComposer]) => {
+  document.body.style.overflow = currentDetail || currentDelete || currentComposer ? 'hidden' : ''
 })
 
 onMounted(() => {
@@ -406,19 +411,18 @@ onUnmounted(() => {
               </td>
               <td>
                 <div class="flex items-center justify-end gap-1">
-                  <a
-                    v-if="whatsappUrl(registration)"
-                    :href="whatsappUrl(registration)"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    v-if="hasWhatsApp(registration)"
+                    type="button"
                     class="flex h-8 w-8 items-center justify-center rounded-lg bg-lime/15 text-moss transition-colors hover:bg-lime hover:text-white"
                     title="Hubungi via WhatsApp"
                     aria-label="Hubungi pendaftar via WhatsApp"
+                    @click="openWhatsApp(registration)"
                   >
                     <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12.04 2a9.9 9.9 0 00-8.5 15.02L2 22l5.1-1.5A9.9 9.9 0 1012.04 2zm0 18.1a8.2 8.2 0 01-4.18-1.14l-.3-.18-3.02.89.9-2.95-.2-.31A8.2 8.2 0 1112.04 20.1zm4.5-6.14c-.25-.13-1.47-.73-1.7-.81-.23-.09-.4-.13-.56.12-.17.25-.64.81-.78.98-.14.16-.29.18-.53.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05 0 1.2.88 2.37 1 2.53.12.17 1.73 2.64 4.2 3.7.59.25 1.04.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.23-.17-.48-.3z" />
                     </svg>
-                  </a>
+                  </button>
                   <button
                     type="button"
                     class="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-paper hover:text-ink"
@@ -518,18 +522,17 @@ onUnmounted(() => {
             <div class="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-white px-5 py-4">
               <button type="button" class="admin-btn admin-btn-ghost" @click="detail = null">Tutup</button>
               <div class="flex flex-wrap items-center gap-2">
-                <a
-                  v-if="whatsappUrl(detail)"
-                  :href="whatsappUrl(detail)"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  v-if="hasWhatsApp(detail)"
+                  type="button"
                   class="admin-btn admin-btn-dark"
+                  @click="openWhatsApp(detail)"
                 >
                   <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12.04 2a9.9 9.9 0 00-8.5 15.02L2 22l5.1-1.5A9.9 9.9 0 1012.04 2zm0 18.1a8.2 8.2 0 01-4.18-1.14l-.3-.18-3.02.89.9-2.95-.2-.31A8.2 8.2 0 1112.04 20.1zm4.5-6.14c-.25-.13-1.47-.73-1.7-.81-.23-.09-.4-.13-.56.12-.17.25-.64.81-.78.98-.14.16-.29.18-.53.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05 0 1.2.88 2.37 1 2.53.12.17 1.73 2.64 4.2 3.7.59.25 1.04.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.23-.17-.48-.3z" />
                   </svg>
                   WhatsApp
-                </a>
+                </button>
                 <button
                   v-if="detail.status !== 'cancelled'"
                   type="button"
@@ -600,6 +603,17 @@ onUnmounted(() => {
         </div>
       </Transition>
     </Teleport>
+
+    <!-- Dialog komposer WhatsApp -->
+    <WhatsAppComposer
+      v-if="waComposer"
+      :recipient-name="waComposer.name"
+      :phone="waComposer.phone"
+      :default-message="eventRegistrationMessage(waComposer)"
+      eyebrow="Pendaftar agenda"
+      title="Kirim pesan WhatsApp"
+      @close="waComposer = null"
+    />
   </div>
 </template>
 

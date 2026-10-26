@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import WhatsAppComposer from '@/components/common/WhatsAppComposer.vue'
 import { useApplicantStore } from '@/stores/applicants'
 import { useSiteStore } from '@/stores/site'
 import type { ApplicantStatus, LK1Applicant } from '@/types'
+import { isValidWhatsAppNumber } from '@/utils/whatsapp'
 
 const store = useApplicantStore()
 const siteStore = useSiteStore()
 const detail = ref<LK1Applicant | null>(null)
 const toastMessage = ref('')
 const showToast = ref(false)
-const waPrompt = ref<{ applicant: LK1Applicant; message: string; url: string } | null>(null)
+const waComposer = ref<LK1Applicant | null>(null)
 
 const filters: Array<{ value: ApplicantStatus | 'Semua'; label: string }> = [
   { value: 'Semua', label: 'Semua' },
@@ -56,15 +58,8 @@ function triggerToast(message: string) {
   }, 3200)
 }
 
-function normalizeWhatsAppNumber(phone: string) {
-  let digits = phone.replace(/\D/g, '')
-  if (!digits) return ''
-  if (digits.startsWith('00')) digits = digits.slice(2)
-  if (digits.startsWith('620')) digits = `62${digits.slice(3)}`
-  if (digits.startsWith('62')) return digits
-  if (digits.startsWith('0')) return `62${digits.slice(1)}`
-  if (digits.startsWith('8')) return `62${digits}`
-  return digits
+function hasWhatsApp(applicant: LK1Applicant) {
+  return isValidWhatsAppNumber(applicant.phone)
 }
 
 function acceptanceMessage(applicant: LK1Applicant) {
@@ -82,20 +77,12 @@ function acceptanceMessage(applicant: LK1Applicant) {
   ].join('\n')
 }
 
-function whatsappUrl(applicant: LK1Applicant) {
-  const number = normalizeWhatsAppNumber(applicant.phone)
-  if (!/^62\d{8,13}$/.test(number)) return ''
-  return `https://wa.me/${number}?text=${encodeURIComponent(acceptanceMessage(applicant))}`
-}
-
 function openWhatsApp(applicant: LK1Applicant) {
-  const url = whatsappUrl(applicant)
-  if (!url) {
+  if (!hasWhatsApp(applicant)) {
     triggerToast('Nomor WhatsApp pendaftar belum tersedia atau tidak valid.')
     return
   }
-  window.open(url, '_blank', 'noopener,noreferrer')
-  waPrompt.value = null
+  waComposer.value = applicant
 }
 
 async function updateStatus(applicant: LK1Applicant, status: ApplicantStatus) {
@@ -110,9 +97,8 @@ async function updateStatus(applicant: LK1Applicant, status: ApplicantStatus) {
   }
   if (status === 'accepted') {
     const updated = store.applicants.find((item) => item.id === applicant.id) ?? { ...applicant, status }
-    const url = whatsappUrl(updated)
-    if (url) {
-      waPrompt.value = { applicant: updated, message: acceptanceMessage(updated), url }
+    if (hasWhatsApp(updated)) {
+      waComposer.value = updated
       triggerToast('Pendaftar diterima. Kirim konfirmasi penerimaan melalui WhatsApp.')
     } else {
       triggerToast('Pendaftar diterima, tetapi nomor WhatsApp tidak valid. Hubungi pendaftar secara manual.')
@@ -141,15 +127,15 @@ function resetFilters() {
 
 function handleKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
-  if (waPrompt.value) {
-    waPrompt.value = null
+  if (waComposer.value) {
+    waComposer.value = null
     return
   }
   detail.value = null
 }
 
-watch([detail, waPrompt], ([currentDetail, currentPrompt]) => {
-  document.body.style.overflow = currentDetail || currentPrompt ? 'hidden' : ''
+watch([detail, waComposer], ([currentDetail, currentComposer]) => {
+  document.body.style.overflow = currentDetail || currentComposer ? 'hidden' : ''
 })
 
 onMounted(() => {
@@ -326,19 +312,18 @@ onUnmounted(() => {
                       <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                   </button>
-                  <a
-                    v-else-if="whatsappUrl(applicant)"
-                    :href="whatsappUrl(applicant)"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    v-else-if="hasWhatsApp(applicant)"
+                    type="button"
                     class="flex h-8 w-8 items-center justify-center rounded-lg bg-lime/15 text-moss transition-colors hover:bg-lime hover:text-white"
                     title="Kirim WhatsApp penerimaan"
                     aria-label="Kirim WhatsApp penerimaan"
+                    @click="openWhatsApp(applicant)"
                   >
                     <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12.04 2a9.9 9.9 0 00-8.5 15.02L2 22l5.1-1.5A9.9 9.9 0 1012.04 2zm0 18.1a8.2 8.2 0 01-4.18-1.14l-.3-.18-3.02.89.9-2.95-.2-.31A8.2 8.2 0 1112.04 20.1zm4.5-6.14c-.25-.13-1.47-.73-1.7-.81-.23-.09-.4-.13-.56.12-.17.25-.64.81-.78.98-.14.16-.29.18-.53.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05 0 1.2.88 2.37 1 2.53.12.17 1.73 2.64 4.2 3.7.59.25 1.04.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.23-.17-.48-.3z" />
                     </svg>
-                  </a>
+                  </button>
                   <button
                     v-if="applicant.status !== 'rejected'"
                     type="button"
@@ -447,18 +432,17 @@ onUnmounted(() => {
             <div class="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-white px-5 py-4">
               <button type="button" class="admin-btn admin-btn-ghost" @click="detail = null">Tutup</button>
               <div class="flex items-center gap-2">
-                <a
-                  v-if="detail.status === 'accepted' && whatsappUrl(detail)"
-                  :href="whatsappUrl(detail)"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  v-if="detail.status === 'accepted' && hasWhatsApp(detail)"
+                  type="button"
                   class="admin-btn admin-btn-lime"
+                  @click="openWhatsApp(detail)"
                 >
                   <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12.04 2a9.9 9.9 0 00-8.5 15.02L2 22l5.1-1.5A9.9 9.9 0 1012.04 2zm0 18.1a8.2 8.2 0 01-4.18-1.14l-.3-.18-3.02.89.9-2.95-.2-.31A8.2 8.2 0 1112.04 20.1zm4.5-6.14c-.25-.13-1.47-.73-1.7-.81-.23-.09-.4-.13-.56.12-.17.25-.64.81-.78.98-.14.16-.29.18-.53.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05 0 1.2.88 2.37 1 2.53.12.17 1.73 2.64 4.2 3.7.59.25 1.04.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.23-.17-.48-.3z" />
                   </svg>
                   Kirim WhatsApp
-                </a>
+                </button>
                 <button
                   v-if="detail.status !== 'rejected'"
                   type="button"
@@ -484,63 +468,16 @@ onUnmounted(() => {
       </Transition>
     </Teleport>
 
-    <!-- Dialog konfirmasi WhatsApp setelah pendaftar diterima -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div
-          v-if="waPrompt"
-          class="fixed inset-0 z-[100] flex items-center justify-center bg-ink/80 p-3 backdrop-blur-sm sm:p-5"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="wa-acceptance-title"
-          @click.self="waPrompt = null"
-        >
-          <div class="modal-viewport w-full max-w-lg overflow-y-auto rounded-[1.6rem] border border-line bg-paper shadow-2xl">
-            <div class="flex items-start justify-between gap-4 border-b border-line bg-white px-5 py-4">
-              <div class="flex min-w-0 items-center gap-3">
-                <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-lime text-white">
-                  <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12.04 2a9.9 9.9 0 00-8.5 15.02L2 22l5.1-1.5A9.9 9.9 0 1012.04 2zm0 18.1a8.2 8.2 0 01-4.18-1.14l-.3-.18-3.02.89.9-2.95-.2-.31A8.2 8.2 0 1112.04 20.1zm4.5-6.14c-.25-.13-1.47-.73-1.7-.81-.23-.09-.4-.13-.56.12-.17.25-.64.81-.78.98-.14.16-.29.18-.53.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05 0 1.2.88 2.37 1 2.53.12.17 1.73 2.64 4.2 3.7.59.25 1.04.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.23-.17-.48-.3z" />
-                  </svg>
-                </span>
-                <div class="min-w-0">
-                  <p class="text-[8px] font-black uppercase tracking-[0.16em] text-moss">Pendaftar diterima</p>
-                  <h2 id="wa-acceptance-title" class="mt-1 truncate font-display text-lg font-bold tracking-tight text-ink">Kirim konfirmasi WhatsApp</h2>
-                </div>
-              </div>
-              <button type="button" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-line text-muted transition-colors hover:border-ink hover:text-ink" aria-label="Tutup" @click="waPrompt = null">
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" />
-                </svg>
-              </button>
-            </div>
-
-            <div class="space-y-3 p-5">
-              <p class="text-[11px] font-semibold leading-relaxed text-muted">
-                Pesan penerimaan untuk <span class="font-extrabold text-ink">{{ waPrompt.applicant.fullName }}</span> sudah disiapkan. WhatsApp akan terbuka dengan pesan terisi; tekan kirim di aplikasi WhatsApp.
-              </p>
-              <div class="rounded-[1rem] border border-line bg-white p-4">
-                <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Pratinjau pesan</p>
-                <p class="mt-2 whitespace-pre-line text-[11px] font-medium leading-relaxed text-ink/70">{{ waPrompt.message }}</p>
-              </div>
-              <p class="rounded-[0.9rem] bg-paper px-3 py-2.5 text-[9px] font-semibold leading-relaxed text-muted">
-                Nomor tujuan: <span class="font-extrabold text-ink">{{ waPrompt.applicant.phone }}</span>
-              </p>
-            </div>
-
-            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-white px-5 py-4">
-              <button type="button" class="admin-btn admin-btn-ghost" @click="waPrompt = null">Nanti</button>
-              <button type="button" class="admin-btn admin-btn-lime" @click="openWhatsApp(waPrompt.applicant)">
-                Buka WhatsApp
-                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path d="M7 17L17 7M7 7h10v10" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+    <!-- Dialog komposer WhatsApp -->
+    <WhatsAppComposer
+      v-if="waComposer"
+      :recipient-name="waComposer.fullName"
+      :phone="waComposer.phone"
+      :default-message="acceptanceMessage(waComposer)"
+      eyebrow="Pendaftar LK 1 diterima"
+      title="Kirim konfirmasi WhatsApp"
+      @close="waComposer = null"
+    />
   </div>
 </template>
 

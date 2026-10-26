@@ -14,7 +14,7 @@ const props = withDefaults(
   {
     modelValue: '',
     label: 'Gambar / Foto',
-    hint: 'Mendukung format JPG, PNG, atau WebP (maks. 5MB)',
+    hint: 'Mendukung format JPG, PNG, atau WebP (maks. 3MB)',
     required: false,
     aspectRatio: 'video',
   },
@@ -78,8 +78,9 @@ function processFile(file: File) {
     return
   }
 
-  if (file.size > 5 * 1024 * 1024) {
-    uploadError.value = 'Ukuran berkas melebihi batas maksimal 5MB.'
+  if (file.size > 3 * 1024 * 1024) {
+    uploadError.value =
+      'Ukuran berkas melebihi batas maksimal 3MB. Kompres gambar terlebih dahulu.'
     return
   }
 

@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useArticleStore } from '@/stores/articles'
 import type { Article } from '@/types'
@@ -10,6 +10,9 @@ const store = useArticleStore()
 const search = ref('')
 const statusFilter = ref<'all' | 'published' | 'draft'>('all')
 const categoryFilter = ref('Semua')
+const showDeleteConfirm = ref(false)
+const articleToDelete = ref<Article | null>(null)
+const deleteError = ref('')
 const statusOptions: Array<{ value: 'all' | 'published' | 'draft'; label: string }> = [
   { value: 'all', label: 'Semua' },
   { value: 'published', label: 'Publik' },
@@ -53,11 +56,39 @@ function openEdit(article: Article) {
   router.push({ name: 'admin-article-edit', params: { id: article.id } })
 }
 
-async function deleteArticle(id: string) {
-  if (confirm('Hapus berita ini? Tindakan ini tidak dapat dibatalkan.')) {
-    await store.deleteArticle(id)
-  }
+function confirmDelete(article: Article) {
+  articleToDelete.value = article
+  deleteError.value = ''
+  showDeleteConfirm.value = true
 }
+
+function closeDeleteConfirm() {
+  if (store.isSaving) return
+  showDeleteConfirm.value = false
+  articleToDelete.value = null
+  deleteError.value = ''
+}
+
+async function handleDelete() {
+  if (!articleToDelete.value || store.isSaving) return
+  deleteError.value = ''
+  const ok = await store.deleteArticle(articleToDelete.value.id)
+  if (!ok) {
+    deleteError.value = store.error || 'Gagal menghapus berita.'
+    return
+  }
+  showDeleteConfirm.value = false
+  articleToDelete.value = null
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !showDeleteConfirm.value) return
+  closeDeleteConfirm()
+}
+
+watch(showDeleteConfirm, (open) => {
+  document.body.style.overflow = open ? 'hidden' : ''
+})
 
 async function toggleStatus(article: Article) {
   await store.updateArticle(article.id, {
@@ -78,6 +109,12 @@ function resetFilters() {
 
 onMounted(() => {
   void store.fetchAll()
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  document.body.style.overflow = ''
 })
 </script>
 
@@ -234,7 +271,7 @@ onMounted(() => {
                     type="button"
                     class="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-red-50 hover:text-red-500"
                     title="Hapus berita"
-                    @click="deleteArticle(article.id)"
+                    @click="confirmDelete(article)"
                   >
                     <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
                       <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" />
@@ -255,5 +292,61 @@ onMounted(() => {
         </table>
       </div>
     </div>
+
+    <!-- Delete confirmation modal -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="showDeleteConfirm"
+          class="fixed inset-0 z-[95] flex items-center justify-center bg-ink/80 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-article-title"
+          @click.self="closeDeleteConfirm"
+        >
+          <div class="w-full max-w-sm rounded-[1.5rem] border border-line bg-paper p-6 text-center shadow-2xl">
+            <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500">
+              <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <h3 id="delete-article-title" class="mt-4 font-display text-xl font-bold tracking-tight text-ink">Hapus berita?</h3>
+            <p class="mt-2 text-[11px] font-medium leading-relaxed text-muted">
+              Berita <strong class="text-ink">"{{ articleToDelete?.title }}"</strong> akan dihapus permanen dari portal. Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <p v-if="deleteError" class="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-semibold text-red-600">
+              {{ deleteError }}
+            </p>
+            <div class="mt-6 flex justify-center gap-2">
+              <button type="button" :disabled="store.isSaving" class="admin-btn admin-btn-ghost disabled:opacity-60" @click="closeDeleteConfirm">Batal</button>
+              <button type="button" :disabled="store.isSaving" class="admin-btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-60" @click="handleDelete">
+                <span v-if="store.isSaving" class="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                {{ store.isSaving ? 'Menghapus...' : 'Ya, hapus' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
+
+<style scoped>
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 200ms ease;
+}
+.modal-enter-active > div,
+.modal-leave-active > div {
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from > div,
+.modal-leave-to > div {
+  transform: translateY(14px) scale(0.985);
+  opacity: 0;
+}
+</style>

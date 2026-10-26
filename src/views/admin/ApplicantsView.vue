@@ -77,6 +77,18 @@ function acceptanceMessage(applicant: LK1Applicant) {
   ].join('\n')
 }
 
+function whatsappMessage(applicant: LK1Applicant) {
+  if (applicant.status === 'accepted') return acceptanceMessage(applicant)
+
+  const organization = siteStore.settings.organizationName || 'HMI Komisariat Insan Cita'
+  const chapter = siteStore.settings.chapterName ? ` ${siteStore.settings.chapterName}` : ''
+  return [
+    `Halo ${applicant.fullName},`,
+    '',
+    `Kami dari panitia Pendaftaran Latihan Kader 1 (LK 1) ${organization}${chapter}. Kami ingin mengonfirmasi pendaftaran Anda.`,
+  ].join('\n')
+}
+
 function openWhatsApp(applicant: LK1Applicant) {
   if (!hasWhatsApp(applicant)) {
     triggerToast('Nomor WhatsApp pendaftar belum tersedia atau tidak valid.')
@@ -313,11 +325,11 @@ onUnmounted(() => {
                     </svg>
                   </button>
                   <button
-                    v-else-if="hasWhatsApp(applicant)"
+                    v-if="hasWhatsApp(applicant)"
                     type="button"
                     class="flex h-8 w-8 items-center justify-center rounded-lg bg-lime/15 text-moss transition-colors hover:bg-lime hover:text-white"
-                    title="Kirim WhatsApp penerimaan"
-                    aria-label="Kirim WhatsApp penerimaan"
+                    title="Hubungi via WhatsApp"
+                    aria-label="Hubungi pendaftar via WhatsApp"
                     @click="openWhatsApp(applicant)"
                   >
                     <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -433,15 +445,15 @@ onUnmounted(() => {
               <button type="button" class="admin-btn admin-btn-ghost" @click="detail = null">Tutup</button>
               <div class="flex items-center gap-2">
                 <button
-                  v-if="detail.status === 'accepted' && hasWhatsApp(detail)"
+                  v-if="hasWhatsApp(detail)"
                   type="button"
-                  class="admin-btn admin-btn-lime"
+                  class="admin-btn admin-btn-dark"
                   @click="openWhatsApp(detail)"
                 >
                   <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12.04 2a9.9 9.9 0 00-8.5 15.02L2 22l5.1-1.5A9.9 9.9 0 1012.04 2zm0 18.1a8.2 8.2 0 01-4.18-1.14l-.3-.18-3.02.89.9-2.95-.2-.31A8.2 8.2 0 1112.04 20.1zm4.5-6.14c-.25-.13-1.47-.73-1.7-.81-.23-.09-.4-.13-.56.12-.17.25-.64.81-.78.98-.14.16-.29.18-.53.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05 0 1.2.88 2.37 1 2.53.12.17 1.73 2.64 4.2 3.7.59.25 1.04.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.23-.17-.48-.3z" />
                   </svg>
-                  Kirim WhatsApp
+                  WhatsApp
                 </button>
                 <button
                   v-if="detail.status !== 'rejected'"
@@ -473,9 +485,9 @@ onUnmounted(() => {
       v-if="waComposer"
       :recipient-name="waComposer.fullName"
       :phone="waComposer.phone"
-      :default-message="acceptanceMessage(waComposer)"
-      eyebrow="Pendaftar LK 1 diterima"
-      title="Kirim konfirmasi WhatsApp"
+      :default-message="whatsappMessage(waComposer)"
+      eyebrow="Pendaftar LK 1"
+      title="Kirim pesan WhatsApp"
       @close="waComposer = null"
     />
   </div>

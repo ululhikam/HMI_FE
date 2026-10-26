@@ -112,6 +112,12 @@ const router = createRouter({
           meta: { title: 'Kelola Agenda | Admin HMI' },
         },
         {
+          path: 'pendaftar-agenda',
+          name: 'admin-event-registrations',
+          component: () => import('@/views/admin/EventRegistrationsView.vue'),
+          meta: { title: 'Pendaftar Agenda | Admin HMI' },
+        },
+        {
           path: 'galeri',
           name: 'admin-gallery',
           component: () => import('@/views/admin/GalleryAdminView.vue'),

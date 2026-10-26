@@ -34,6 +34,10 @@ export const endpoints = {
     speakers: '/speakers',
     testimonials: '/testimonials',
   },
+  eventRegistrations: {
+    list: '/event-registrations',
+    detail: (registrationId: string) => `/event-registrations/${id(registrationId)}`,
+  },
   gallery: {
     list: '/gallery',
     detail: (itemId: string) => `/gallery/${id(itemId)}`,

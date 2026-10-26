@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import { useArticleStore } from '@/stores/articles'
 import { useCommentStore } from '@/stores/comments'
+import StarMark from '@/components/ui/StarMark.vue'
 import type { Article } from '@/types'
 
 const route = useRoute()
@@ -13,16 +14,26 @@ const article = ref<Article | null>(null)
 const isLoading = ref(true)
 
 const isLiked = ref(false)
+const isLiking = ref(false)
+const isBookmarking = ref(false)
 const likesCount = computed(() => article.value?.likes ?? 0)
 const showShareToast = ref(false)
+const toastMessage = ref('')
+const readingProgress = ref(0)
 
 const newCommentText = ref('')
 const newCommentAuthor = ref('')
 
 const slug = computed(() => String(route.params.slug ?? ''))
+const shareUrl = computed(() => `${window.location.origin}/berita/${slug.value}`)
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+function formatDate(iso: string | null | undefined, status?: Article['status']) {
+  if (!iso) return status === 'draft' ? 'Belum dipublikasikan' : 'Baru diterbitkan'
+  return new Date(iso).toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
 }
 
 function formatCommentDate(iso: string) {
@@ -62,20 +73,45 @@ async function loadArticle() {
 
   article.value = found
   isLoading.value = false
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+  isLiked.value = store.isLiked(requestedSlug)
   void store.recordView(requestedSlug)
   void commentStore.fetchForArticle(requestedSlug, true)
 }
 
+function showToast(message: string) {
+  toastMessage.value = message
+  showShareToast.value = true
+  setTimeout(() => {
+    showShareToast.value = false
+  }, 2500)
+}
+
 async function toggleLike() {
-  if (!article.value) return
+  if (!article.value || isLiking.value) return
+  isLiking.value = true
   const result = isLiked.value
     ? await store.unlike(article.value.slug)
     : await store.like(article.value.slug)
-  if (result) isLiked.value = result.liked
+  if (result) {
+    isLiked.value = result.liked
+    article.value.likes = result.likes
+  } else if (store.error) {
+    showToast(store.error)
+  }
+  isLiking.value = false
 }
 
-function toggleBookmark() {
-  if (article.value) void store.toggleBookmark(article.value.slug)
+async function toggleBookmark() {
+  if (!article.value || isBookmarking.value) return
+  isBookmarking.value = true
+  const saved = await store.toggleBookmark(article.value.slug)
+  if (store.error) {
+    showToast(store.error)
+  } else {
+    showToast(saved ? 'Berita disimpan di perangkat ini.' : 'Berita dihapus dari simpanan.')
+  }
+  isBookmarking.value = false
 }
 
 async function handleAddComment() {
@@ -90,357 +126,458 @@ async function handleAddComment() {
   }
 }
 
-function copyLink() {
-  navigator.clipboard.writeText(window.location.href)
-  showShareToast.value = true
-  setTimeout(() => {
-    showShareToast.value = false
-  }, 2500)
+async function copyLink() {
+  let copied = false
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(shareUrl.value)
+      copied = true
+    }
+  } catch {
+    copied = false
+  }
+
+  if (!copied) {
+    try {
+      const input = document.createElement('textarea')
+      input.value = shareUrl.value
+      input.setAttribute('readonly', '')
+      input.style.position = 'fixed'
+      input.style.opacity = '0'
+      document.body.appendChild(input)
+      input.select()
+      copied = document.execCommand('copy')
+      document.body.removeChild(input)
+    } catch {
+      copied = false
+    }
+  }
+
+  showToast(
+    copied
+      ? 'Tautan berita berhasil disalin.'
+      : 'Tautan tidak dapat disalin otomatis. Salin dari bilah alamat browser.',
+  )
+}
+
+function updateReadingProgress() {
+  const scrollTop = window.scrollY
+  const height = document.documentElement.scrollHeight - window.innerHeight
+  readingProgress.value = height > 0 ? Math.min(100, Math.max(0, (scrollTop / height) * 100)) : 0
 }
 
 watch(slug, loadArticle, { immediate: true })
 
-const relatedArticles = computed(() =>
-  store.articles
-    .filter((a) => a.status === 'published' && a.id !== article.value?.id)
-    .slice(0, 3),
-)
+onMounted(() => {
+  // Muat feed publik agar sidebar populer dan berita terkait tetap tersedia saat halaman dibuka langsung.
+  void store.fetchPublished()
+  window.addEventListener('scroll', updateReadingProgress, { passive: true })
+  updateReadingProgress()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', updateReadingProgress)
+})
+
+const relatedArticles = computed(() => {
+  const current = article.value
+  return store.publishedArticles
+    .filter((item) => item.id !== current?.id)
+    .sort((a, b) => {
+      const sameCategoryA = current && a.category === current.category ? 1 : 0
+      const sameCategoryB = current && b.category === current.category ? 1 : 0
+      if (sameCategoryA !== sameCategoryB) return sameCategoryB - sameCategoryA
+      return new Date(b.publishedAt ?? 0).getTime() - new Date(a.publishedAt ?? 0).getTime()
+    })
+    .slice(0, 3)
+})
+
+const shareLinks = computed(() => {
+  const url = encodeURIComponent(shareUrl.value)
+  const title = encodeURIComponent(article.value?.title ?? '')
+  return [
+    { label: 'WhatsApp', href: `https://wa.me/?text=${title}%20${url}` },
+    { label: 'Telegram', href: `https://t.me/share/url?url=${url}&text=${title}` },
+    { label: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${url}` },
+    { label: 'X', href: `https://twitter.com/intent/tweet?url=${url}&text=${title}` },
+  ]
+})
 </script>
 
 <template>
-  <div class="pt-[67px] bg-[#F7F7F5] min-h-screen text-[#111212]">
-    <!-- Toast Notification -->
+  <div class="screen-min bg-paper text-ink">
+    <!-- Reading progress -->
     <div
-      v-if="showShareToast"
-      class="fixed bottom-6 right-6 z-50 bg-[#111212] text-white text-xs font-bold px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 border border-[#009246] animate-bounce"
-    >
-      <svg class="w-4 h-4 text-[#009246]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-      </svg>
-      <span>Tautan berita berhasil disalin ke clipboard!</span>
-    </div>
+      v-if="article"
+      class="fixed left-0 top-0 z-[60] h-[3px] bg-lime transition-[width] duration-150"
+      :style="{ width: `${readingProgress}%` }"
+      aria-hidden="true"
+    />
 
-    <div v-if="article">
-      <!-- Top Breadcrumbs Bar -->
-      <div class="bg-white border-b border-[#E6E6E6]">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <nav class="flex items-center gap-2 text-xs text-[#4D4D4D] font-medium overflow-x-auto whitespace-nowrap">
-            <RouterLink to="/" class="hover:text-[#009246] transition-colors">Beranda</RouterLink>
-            <span>/</span>
-            <RouterLink to="/berita" class="hover:text-[#009246] transition-colors">Berita</RouterLink>
-            <span>/</span>
-            <span class="text-[#009246] font-semibold">{{ article.category }}</span>
-            <span>/</span>
-            <span class="text-[#111212] font-semibold truncate max-w-xs">{{ article.title }}</span>
-          </nav>
-        </div>
+    <!-- Share toast -->
+    <Transition name="toast">
+      <div
+        v-if="showShareToast"
+        class="fixed bottom-5 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-5 py-3 text-xs font-bold text-white shadow-2xl"
+      >
+        <span class="flex h-5 w-5 items-center justify-center rounded-full bg-lime text-white">
+          <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        {{ toastMessage || 'Tautan berita berhasil disalin.' }}
       </div>
+    </Transition>
 
-      <!-- Main Article Container -->
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="grid lg:grid-cols-12 gap-10">
-          
-          <!-- Left Main Content Column (8 cols) -->
-          <main class="lg:col-span-8 bg-white p-6 sm:p-10 rounded-3xl border border-[#E6E6E6] shadow-sm">
-            <!-- Article Header Meta -->
-            <div class="space-y-4 border-b border-[#E6E6E6] pb-6 mb-8">
+    <template v-if="article">
+      <!-- Article hero -->
+      <section class="relative overflow-hidden bg-ink pb-[clamp(5rem,10svh,8rem)] pt-[clamp(0.75rem,1.5svh,1.25rem)] text-paper">
+        <div class="pointer-events-none absolute inset-0 bg-grid-dark opacity-60" />
+        <div class="pointer-events-none absolute -right-32 top-10 h-[420px] w-[420px] rounded-full bg-moss/20 blur-[130px]" />
+
+        <div class="container-wide relative z-10">
+          <nav class="hide-scrollbar flex items-center gap-2 overflow-x-auto py-2 text-[9px] font-bold uppercase tracking-[0.12em] text-white/60" aria-label="Breadcrumb">
+            <RouterLink to="/" class="flex-shrink-0 transition-colors hover:text-lime-soft">Beranda</RouterLink>
+            <span class="text-white/20">/</span>
+            <RouterLink to="/berita" class="flex-shrink-0 transition-colors hover:text-lime-soft">Berita</RouterLink>
+            <span class="text-white/20">/</span>
+            <RouterLink
+              :to="{ name: 'news', query: { category: article.category } }"
+              class="flex-shrink-0 text-lime-soft transition-colors hover:text-white"
+            >
+              {{ article.category }}
+            </RouterLink>
+            <span class="text-white/20">/</span>
+            <span class="max-w-[26rem] truncate text-white/60">{{ article.title }}</span>
+          </nav>
+
+          <div class="mt-[clamp(1.5rem,3.5svh,2.5rem)] max-w-5xl">
+            <div class="flex flex-wrap items-center gap-2">
+              <RouterLink
+                :to="{ name: 'news', query: { category: article.category } }"
+                class="rounded-full bg-lime px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.14em] text-white transition-colors hover:bg-lime-bright"
+              >
+                {{ article.category }}
+              </RouterLink>
+              <span v-if="article.readTime" class="rounded-full border border-white/15 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.14em] text-white/65">{{ article.readTime }}</span>
+              <span class="rounded-full border border-white/15 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.14em] text-white/65">{{ article.views.toLocaleString('id-ID') }} dibaca</span>
+            </div>
+
+            <h1 class="hero-title mt-5 max-w-5xl text-balance text-white">{{ article.title }}</h1>
+            <p v-if="article.excerpt" class="hero-copy-gap max-w-3xl text-sm font-medium leading-relaxed text-white/55 sm:text-base">
+              {{ article.excerpt }}
+            </p>
+
+            <div class="mt-8 flex flex-col justify-between gap-5 border-t border-white/10 pt-5 sm:flex-row sm:items-center">
               <div class="flex items-center gap-3">
-                <span class="bg-[#009246] text-white text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full">
-                  {{ article.category }}
+                <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/15 bg-white/5 text-xs font-black text-lime-soft">
+                  <img v-if="article.authorAvatar" :src="article.authorAvatar" :alt="article.author" class="h-full w-full object-cover" />
+                  <span v-else>{{ initials(article.author) }}</span>
                 </span>
-                <span class="text-xs text-[#4D4D4D] font-medium flex items-center gap-1">
-                  <svg class="w-3.5 h-3.5 text-[#009246]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {{ article.readTime || '5 min read' }}
-                </span>
-              </div>
-
-              <!-- Main Title -->
-              <h1 class="text-2xl sm:text-4xl lg:text-5xl font-black text-[#111212] leading-tight tracking-tight">
-                {{ article.title }}
-              </h1>
-
-              <!-- Subtitle Excerpt -->
-              <p class="text-base sm:text-lg text-[#4D4D4D] leading-relaxed font-normal">
-                {{ article.excerpt }}
-              </p>
-
-              <!-- Author & Publishing Meta Bar -->
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4">
-                <div class="flex items-center gap-3">
-                  <div class="w-11 h-11 rounded-full overflow-hidden border-2 border-[#009246] bg-[#009246]/10">
-                    <img
-                      v-if="article.authorAvatar"
-                      :src="article.authorAvatar"
-                      :alt="article.author"
-                      class="w-full h-full object-cover"
-                    />
-                    <span v-else class="w-full h-full flex items-center justify-center text-sm font-black text-[#009246]">
-                      {{ initials(article.author) }}
-                    </span>
-                  </div>
-                  <div>
-                    <div class="flex items-center gap-1.5 font-bold text-sm text-[#111212]">
-                      <span>{{ article.author }}</span>
-                      <svg class="w-3.5 h-3.5 text-[#009246] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <p class="text-xs text-[#4D4D4D]">{{ article.authorRole }} • {{ formatDate(article.publishedAt) }}</p>
-                  </div>
-                </div>
-
-                <!-- Action Share Buttons -->
-                <div class="flex items-center gap-2">
-                  <button
-                    @click="toggleLike"
-                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all"
-                    :class="isLiked ? 'bg-[#009246]/10 text-[#009246] border-[#009246]' : 'bg-[#F7F7F5] text-[#4D4D4D] border-[#E6E6E6] hover:bg-gray-100'"
-                  >
-                    <svg class="w-4 h-4" :fill="isLiked ? '#009246' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                <div>
+                  <p class="flex items-center gap-1.5 text-xs font-extrabold text-white/85">
+                    {{ article.author }}
+                    <svg class="h-3 w-3 text-lime-soft" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
-                    <span>{{ likesCount }}</span>
-                  </button>
-
-                  <button
-                    @click="toggleBookmark"
-                    class="p-2 rounded-xl border text-xs transition-all"
-                    :class="store.isBookmarked(article.slug) ? 'bg-[#009246]/10 text-[#009246] border-[#009246]' : 'bg-[#F7F7F5] text-[#4D4D4D] border-[#E6E6E6] hover:bg-gray-100'"
-                  >
-                    <svg class="w-4 h-4" :fill="store.isBookmarked(article.slug) ? '#009246' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                    </svg>
-                  </button>
-
-                  <button @click="copyLink" class="p-2 rounded-xl bg-[#F7F7F5] border border-[#E6E6E6] hover:bg-gray-100 text-[#4D4D4D] text-xs font-bold flex items-center gap-1.5">
-                    <svg class="w-4 h-4 text-[#009246]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                    </svg>
-                    <span>Bagikan</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Cover Image & Caption -->
-            <div class="space-y-2 mb-8">
-              <div class="relative rounded-2xl overflow-hidden shadow-lg aspect-video">
-                <img :src="article.coverImage" :alt="article.title" class="w-full h-full object-cover" />
-              </div>
-              <p class="text-[11px] text-[#4D4D4D] italic text-center">Dokumentasi Rilis Berita HMI Insan Cita • Foto oleh Tim Redaksi Multimedia</p>
-            </div>
-
-            <!-- Main Article Body -->
-            <div
-              class="prose prose-lg max-w-none text-[#231F20] leading-relaxed prose-headings:font-black prose-headings:text-[#111212] prose-a:text-[#009246] prose-blockquote:border-[#009246] prose-blockquote:bg-[#009246]/5 prose-blockquote:rounded-r-2xl prose-blockquote:py-3 prose-blockquote:px-5"
-              v-html="article.content"
-            />
-
-            <!-- Tags Section -->
-            <div class="pt-8 mt-10 border-t border-[#E6E6E6] flex flex-wrap items-center justify-between gap-4">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-xs font-bold text-[#111212]">Tag Terkait:</span>
-                <span
-                  v-for="tag in article.tags"
-                  :key="tag"
-                  class="text-xs text-[#009246] bg-[#009246]/10 px-3 py-1 rounded-full font-semibold border border-[#009246]/20"
-                >
-                  #{{ tag }}
-                </span>
-              </div>
-
-              <div class="flex items-center gap-2 text-xs font-medium text-[#4D4D4D]">
-                <span>Views: {{ article.views.toLocaleString() }} dibaca</span>
-              </div>
-            </div>
-
-            <!-- Author Info Box -->
-            <div class="bg-[#F7F7F5] p-6 rounded-2xl border border-[#E6E6E6] mt-8 flex items-start gap-4">
-              <div class="w-16 h-16 rounded-full overflow-hidden border-2 border-[#009246] shrink-0 bg-[#009246]/10">
-                <img
-                  v-if="article.authorAvatar"
-                  :src="article.authorAvatar"
-                  :alt="article.author"
-                  class="w-full h-full object-cover"
-                />
-                <span v-else class="w-full h-full flex items-center justify-center text-lg font-black text-[#009246]">
-                  {{ initials(article.author) }}
-                </span>
-              </div>
-              <div class="space-y-1">
-                <h4 class="text-sm font-extrabold text-[#111212]">Penulis: {{ article.author }}</h4>
-                <p class="text-xs text-[#009246] font-semibold">{{ article.authorRole }}</p>
-              </div>
-            </div>
-
-            <!-- Comments / Discussion Section -->
-            <section class="mt-12 pt-8 border-t border-[#E6E6E6]">
-              <h3 class="text-xl font-black text-[#111212] mb-6 flex items-center gap-2">
-                <svg class="w-5 h-5 text-[#009246]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <span>Discussions & Comments</span>
-                <span class="text-xs bg-[#009246]/10 text-[#009246] px-2.5 py-0.5 rounded-full font-bold">{{ commentStore.comments.length }}</span>
-              </h3>
-
-              <!-- Submit Comment Form -->
-              <form @submit.prevent="handleAddComment" class="bg-[#F7F7F5] p-5 rounded-2xl border border-[#E6E6E6] space-y-3 mb-8">
-                <h4 class="text-xs font-bold text-[#111212]">Tuliskan Gagasan atau Tanggapan Anda:</h4>
-                <input
-                  v-model="newCommentAuthor"
-                  type="text"
-                  placeholder="Nama Lengkap Anda..."
-                  class="w-full px-3.5 py-2 bg-white border border-[#E6E6E6] rounded-xl text-xs focus:outline-none focus:border-[#009246]"
-                  required
-                />
-                <textarea
-                  v-model="newCommentText"
-                  rows="3"
-                  placeholder="Tuliskan pandangan atau komentar Anda terkait artikel ini..."
-                  class="w-full px-3.5 py-2.5 bg-white border border-[#E6E6E6] rounded-xl text-xs focus:outline-none focus:border-[#009246]"
-                  required
-                ></textarea>
-                <button
-                  type="submit"
-                  :disabled="commentStore.isSubmitting"
-                  class="px-5 py-2.5 bg-[#009246] hover:bg-[#006837] disabled:opacity-60 text-white font-bold text-xs rounded-xl transition-colors shadow-md"
-                >
-                  {{ commentStore.isSubmitting ? 'Mengirim...' : 'Kirim Komentar' }}
-                </button>
-                <p v-if="commentStore.error" class="text-xs text-red-500">{{ commentStore.error }}</p>
-              </form>
-
-              <!-- Existing Comments List -->
-              <div v-if="commentStore.isLoading" class="text-xs text-[#4D4D4D]">Memuat komentar...</div>
-              <div v-else-if="commentStore.comments.length" class="space-y-4">
-                <div
-                  v-for="c in commentStore.comments"
-                  :key="c.id"
-                  class="p-4 bg-white rounded-2xl border border-[#E6E6E6] space-y-2"
-                >
-                  <div class="flex items-center justify-between text-xs">
-                    <div class="flex items-center gap-2">
-                      <div class="w-7 h-7 rounded-full overflow-hidden bg-[#009246]/10">
-                        <img
-                          v-if="c.avatar"
-                          :src="c.avatar"
-                          :alt="c.author"
-                          class="w-full h-full object-cover"
-                        />
-                        <span v-else class="w-full h-full flex items-center justify-center text-[9px] font-black text-[#009246]">
-                          {{ initials(c.author) }}
-                        </span>
-                      </div>
-                      <span class="font-bold text-[#111212]">{{ c.author }}</span>
-                    </div>
-                    <span class="text-[10px] text-[#4D4D4D]">{{ formatCommentDate(c.createdAt) }}</span>
-                  </div>
-                  <p class="text-xs text-[#4D4D4D] leading-relaxed pl-9">
-                    {{ c.text }}
+                  </p>
+                  <p class="mt-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-white/60">
+                    {{ article.authorRole || 'Tim Redaksi' }} · {{ formatDate(article.publishedAt, article.status) }}
                   </p>
                 </div>
               </div>
-              <p v-else class="text-xs text-[#4D4D4D]">Belum ada komentar. Jadilah yang pertama berdiskusi.</p>
-            </section>
-          </main>
 
-          <!-- Right Sidebar Column (4 cols) -->
-          <aside class="lg:col-span-4 space-y-8">
-            <!-- Sidebar Widget: Related Popular News -->
-            <div class="bg-white p-5 rounded-3xl border border-[#E6E6E6] shadow-sm">
-              <h3 class="text-xs font-extrabold uppercase tracking-wider text-[#111212] mb-4 border-b border-[#E6E6E6] pb-3 flex items-center gap-2">
-                <span class="w-2.5 h-2.5 bg-[#009246] rounded-full"></span>
-                Berita Terpopuler
-              </h3>
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  class="flex h-9 items-center gap-2 rounded-full border px-3.5 text-[9px] font-extrabold uppercase tracking-[0.1em] transition-all disabled:opacity-60"
+                  :class="isLiked ? 'border-lime bg-lime text-white' : 'border-white/15 text-white/55 hover:border-lime-soft hover:text-lime-soft'"
+                  :aria-pressed="isLiked"
+                  :disabled="isLiking"
+                  @click="toggleLike"
+                >
+                  <svg class="h-3.5 w-3.5" :fill="isLiked ? 'currentColor' : 'none'" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
+                    <path d="M4.3 6.3a4.5 4.5 0 000 6.4L12 20.4l7.7-7.7a4.5 4.5 0 00-6.4-6.4L12 7.6l-1.3-1.3a4.5 4.5 0 00-6.4 0z" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  {{ likesCount }} suka
+                </button>
+                <button
+                  type="button"
+                  class="flex h-9 w-9 items-center justify-center rounded-full border transition-all disabled:opacity-60"
+                  :class="store.isBookmarked(article.slug) ? 'border-lime bg-lime text-white' : 'border-white/15 text-white/55 hover:border-lime-soft hover:text-lime-soft'"
+                  :aria-label="store.isBookmarked(article.slug) ? 'Hapus simpanan' : 'Simpan berita'"
+                  :disabled="isBookmarking"
+                  @click="toggleBookmark"
+                >
+                  <svg class="h-3.5 w-3.5" :fill="store.isBookmarked(article.slug) ? 'currentColor' : 'none'" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
+                    <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  class="flex h-9 items-center gap-2 rounded-full border border-white/15 px-3.5 text-[9px] font-extrabold uppercase tracking-[0.1em] text-white/55 transition-all hover:border-lime-soft hover:text-lime-soft"
+                  @click="copyLink"
+                >
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                    <path d="M8.7 13.3a3 3 0 010-2.7m0 2.7l6.6 3.3m-6.6-6l6.6-3.3m0 0a3 3 0 105.4-2.7 3 3 0 00-5.4 2.7zm0 9.3a3 3 0 105.4 2.7 3 3 0 00-5.4-2.7z" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  Salin tautan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-              <div class="space-y-4">
+      <!-- Content -->
+      <div class="container-wide relative z-10 -mt-20 pb-14 sm:pb-20">
+        <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+          <!-- Main article -->
+          <article class="overflow-hidden rounded-[1.75rem] border border-line bg-white shadow-soft">
+            <div v-if="article.coverImage" class="relative aspect-[16/9] overflow-hidden bg-paper-deep">
+              <img :src="article.coverImage" :alt="article.title" class="h-full w-full object-cover" />
+            </div>
+            <div v-else class="relative flex aspect-[16/7] items-center justify-center overflow-hidden bg-ink">
+              <div class="absolute inset-0 bg-grid-dark opacity-60" />
+              <StarMark :size="64" class="relative text-lime-soft/80" />
+            </div>
+
+            <div class="p-5 sm:p-8 lg:p-10">
+              <div class="article-body" v-html="article.content" />
+
+              <div class="mt-10 flex flex-col justify-between gap-4 border-t border-line pt-5 sm:flex-row sm:items-center">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-[9px] font-black uppercase tracking-[0.12em] text-muted">Tag</span>
+                  <RouterLink
+                    v-for="tag in article.tags"
+                    :key="tag"
+                    :to="{ name: 'news', query: { q: tag } }"
+                    class="rounded-full border border-line bg-paper px-2.5 py-1 text-[9px] font-bold text-ink/60 transition-colors hover:border-ink hover:bg-ink hover:text-lime-soft"
+                  >
+                    #{{ tag }}
+                  </RouterLink>
+                </div>
+                <span class="text-[9px] font-bold uppercase tracking-[0.1em] text-muted">{{ article.views.toLocaleString('id-ID') }} kali dibaca</span>
+              </div>
+
+              <!-- Author box -->
+              <div class="mt-8 flex flex-col gap-4 rounded-[1.4rem] bg-paper p-5 sm:flex-row sm:items-center">
+                <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-lime bg-white text-sm font-black text-moss">
+                  <img v-if="article.authorAvatar" :src="article.authorAvatar" :alt="article.author" class="h-full w-full object-cover" />
+                  <span v-else>{{ initials(article.author) }}</span>
+                </span>
+                <div class="flex-1">
+                  <p class="text-[8px] font-black uppercase tracking-[0.16em] text-muted">Ditulis oleh</p>
+                  <h3 class="mt-1 font-display text-lg font-semibold tracking-tight text-ink">{{ article.author }}</h3>
+                  <p class="mt-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-moss">{{ article.authorRole || 'Tim Redaksi' }}</p>
+                </div>
+                <button type="button" class="btn btn-outline-dark self-start sm:self-auto" @click="copyLink">Bagikan</button>
+              </div>
+
+              <!-- Comments -->
+              <section class="mt-10 border-t border-line pt-8">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <span class="eyebrow">Ruang diskusi</span>
+                    <h2 class="display-md mt-3 text-2xl">Tanggapan<span class="text-moss">.</span></h2>
+                  </div>
+                  <span class="rounded-full bg-paper px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.1em] text-muted">
+                    {{ commentStore.comments.length }} komentar
+                  </span>
+                </div>
+
+                <form class="mt-6 space-y-2.5 rounded-[1.4rem] border border-line bg-paper p-4 sm:p-5" @submit.prevent="handleAddComment">
+                  <input
+                    v-model="newCommentAuthor"
+                    type="text"
+                    placeholder="Nama lengkap"
+                    class="field"
+                    required
+                  />
+                  <textarea
+                    v-model="newCommentText"
+                    rows="3"
+                    placeholder="Tuliskan pandangan atau tanggapan Anda..."
+                    class="field resize-none"
+                    required
+                  />
+                  <div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                    <p class="text-[9px] font-semibold text-muted">Bersikaplah sopan dan relevan dengan topik.</p>
+                    <button type="submit" :disabled="commentStore.isSubmitting" class="btn btn-ink disabled:opacity-60">
+                      {{ commentStore.isSubmitting ? 'Mengirim...' : 'Kirim komentar' }}
+                    </button>
+                  </div>
+                  <p v-if="commentStore.error" class="text-[10px] font-semibold text-red-600">{{ commentStore.error }}</p>
+                </form>
+
+                <p v-if="commentStore.isLoading" class="mt-5 text-xs font-semibold text-muted">Memuat komentar...</p>
+                <div v-else-if="commentStore.comments.length" class="mt-5 space-y-3">
+                  <div v-for="comment in commentStore.comments" :key="comment.id" class="rounded-[1.2rem] border border-line bg-white p-4">
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-2.5">
+                        <span class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-paper text-[9px] font-black text-moss">
+                          <img v-if="comment.avatar" :src="comment.avatar" :alt="comment.author" class="h-full w-full object-cover" />
+                          <span v-else>{{ initials(comment.author) }}</span>
+                        </span>
+                        <div>
+                          <p class="text-[10px] font-extrabold text-ink">{{ comment.author }}</p>
+                          <p class="mt-0.5 text-[8px] font-semibold text-muted">{{ formatCommentDate(comment.createdAt) }}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="mt-3 text-xs font-medium leading-relaxed text-ink/65">{{ comment.text }}</p>
+                  </div>
+                </div>
+                <p v-else class="mt-5 rounded-[1.2rem] border border-dashed border-line p-5 text-center text-xs font-semibold text-muted">
+                  Belum ada komentar. Jadilah yang pertama berdiskusi.
+                </p>
+              </section>
+            </div>
+          </article>
+
+          <!-- Sidebar -->
+          <aside class="space-y-4 lg:sticky lg:top-[calc(var(--nav-offset)+clamp(1rem,2svh,2rem))]">
+            <div class="rounded-[1.4rem] border border-line bg-white p-5">
+              <div class="flex items-center justify-between border-b border-line pb-3">
+                <h3 class="text-[9px] font-black uppercase tracking-[0.14em] text-ink">Paling dibaca</h3>
+                <span class="text-[8px] font-bold uppercase tracking-[0.1em] text-muted">Top 4</span>
+              </div>
+              <div v-if="store.trendingArticles.length" class="mt-4 space-y-4">
                 <RouterLink
-                  v-for="item in store.trendingArticles.slice(0, 4)"
+                  v-for="(item, index) in store.trendingArticles.slice(0, 4)"
                   :key="item.id"
                   :to="`/berita/${item.slug}`"
-                  class="group flex gap-3 items-center"
+                  class="group flex items-start gap-3"
                 >
-                  <div class="w-20 h-16 shrink-0 rounded-xl overflow-hidden relative">
-                    <img :src="item.coverImage" :alt="item.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  </div>
-                  <div class="flex-1">
-                    <h4 class="text-xs font-bold text-[#111212] group-hover:text-[#009246] transition-colors line-clamp-2 leading-snug">
-                      {{ item.title }}
-                    </h4>
-                    <p class="text-[10px] text-[#4D4D4D] mt-1">{{ formatDate(item.publishedAt) }}</p>
+                  <span class="w-6 flex-shrink-0 font-display text-2xl font-bold leading-none text-paper-deep transition-colors group-hover:text-moss">0{{ index + 1 }}</span>
+                  <div class="min-w-0">
+                    <h4 class="line-clamp-2 text-xs font-bold leading-snug text-ink transition-colors group-hover:text-moss">{{ item.title }}</h4>
+                    <p class="mt-1 text-[8px] font-semibold uppercase tracking-[0.08em] text-muted">{{ item.category }} · {{ item.views.toLocaleString('id-ID') }} dibaca</p>
                   </div>
                 </RouterLink>
               </div>
+              <p v-else class="mt-4 text-[11px] font-semibold text-muted">Belum ada berita populer.</p>
             </div>
 
-            <!-- Back to News List Button CTA -->
-            <div class="bg-white p-6 rounded-3xl border border-[#E6E6E6] shadow-sm text-center space-y-3">
-              <div class="w-10 h-10 rounded-full bg-[#009246]/10 text-[#009246] flex items-center justify-center mx-auto">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-                </svg>
+            <div class="rounded-[1.4rem] border border-line bg-white p-5">
+              <h3 class="text-[9px] font-black uppercase tracking-[0.14em] text-ink">Bagikan berita</h3>
+              <div class="mt-3 grid grid-cols-2 gap-2">
+                <a
+                  v-for="link in shareLinks"
+                  :key="link.label"
+                  :href="link.href"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="rounded-full border border-line px-3 py-2 text-center text-[8px] font-black uppercase tracking-[0.1em] text-ink/55 transition-colors hover:border-ink hover:bg-ink hover:text-lime-soft"
+                >
+                  {{ link.label }}
+                </a>
               </div>
-              <h4 class="text-sm font-extrabold text-[#111212]">Jelajahi Berita Lainnya</h4>
-              <p class="text-xs text-[#4D4D4D]">Temukan laporan berita, pers rilis, dan ruang wacana terkini dari HMI Insan Cita.</p>
-              <RouterLink to="/berita" class="inline-block w-full py-2.5 bg-[#009246] hover:bg-[#006837] text-white text-xs font-bold rounded-xl transition-colors">
-                Lihat Seluruh Berita
-              </RouterLink>
+              <button
+                type="button"
+                class="mt-2 w-full rounded-full bg-lime px-3 py-2.5 text-[9px] font-black uppercase tracking-[0.12em] text-white transition-colors hover:bg-lime-bright"
+                @click="copyLink"
+              >
+                Salin tautan
+              </button>
+            </div>
+
+            <div class="relative overflow-hidden rounded-[1.4rem] bg-ink p-5 text-paper">
+              <div class="absolute inset-0 bg-grid-dark opacity-50" />
+              <div class="relative">
+                <StarMark :size="26" class="text-lime-soft" />
+                <h3 class="mt-4 font-display text-lg font-semibold leading-tight tracking-tight text-white">Jelajahi berita lainnya</h3>
+                <p class="mt-2 text-[11px] font-medium leading-relaxed text-white/60">
+                  Laporan, opini, dan rilis pers terbaru dari HMI Insan Cita.
+                </p>
+                <RouterLink to="/berita" class="btn btn-lime mt-4 w-full text-[9px]">
+                  Buka portal berita
+                  <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </RouterLink>
+              </div>
             </div>
           </aside>
-
         </div>
 
-        <!-- Related Articles Bottom Grid -->
-        <section v-if="relatedArticles.length" class="mt-16 pt-10 border-t border-[#E6E6E6]">
-          <h3 class="text-2xl font-black text-[#111212] mb-6">Artikel & Berita Terkait</h3>
-          <div class="grid sm:grid-cols-3 gap-6">
+        <!-- Related -->
+        <section v-if="relatedArticles.length" class="mt-14 border-t border-line pt-10">
+          <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div>
+              <span class="eyebrow">Bacaan lanjutan</span>
+              <h2 class="display-md mt-3">Berita terkait<span class="text-moss">.</span></h2>
+            </div>
+            <RouterLink to="/berita" class="link-arrow text-ink">
+              Semua berita
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </RouterLink>
+          </div>
+          <div class="mt-6 grid gap-3 sm:grid-cols-3">
             <RouterLink
-              v-for="rel in relatedArticles"
-              :key="rel.id"
-              :to="`/berita/${rel.slug}`"
-              class="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-[#E6E6E6]"
+              v-for="item in relatedArticles"
+              :key="item.id"
+              :to="`/berita/${item.slug}`"
+              class="group overflow-hidden rounded-[1.4rem] border border-line bg-white transition duration-300 hover:-translate-y-1 hover:border-ink/30 hover:shadow-soft"
             >
-              <div class="relative aspect-video overflow-hidden">
-                <img :src="rel.coverImage" :alt="rel.title" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                <span class="absolute top-3 left-3 bg-[#009246] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  {{ rel.category }}
-                </span>
+              <div class="relative aspect-[16/10] overflow-hidden bg-forest">
+                <img v-if="item.coverImage" :src="item.coverImage" :alt="item.title" class="h-full w-full object-cover grayscale transition duration-700 group-hover:scale-105 group-hover:grayscale-0" />
+                <div v-else class="flex h-full w-full items-center justify-center bg-gradient-to-br from-forest to-ink">
+                  <StarMark :size="32" class="text-lime-soft/70" />
+                </div>
+                <span class="absolute left-3 top-3 rounded-full bg-paper/90 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.1em] text-ink backdrop-blur">{{ item.category }}</span>
               </div>
-              <div class="p-5">
-                <p class="text-xs text-[#4D4D4D] mb-1.5">{{ formatDate(rel.publishedAt) }}</p>
-                <h4 class="text-sm font-extrabold text-[#111212] group-hover:text-[#009246] transition-colors leading-snug line-clamp-2">
-                  {{ rel.title }}
-                </h4>
+              <div class="p-4">
+                <p class="text-[8px] font-bold uppercase tracking-[0.1em] text-muted">{{ formatDate(item.publishedAt, item.status) }}</p>
+                <h3 class="mt-2 line-clamp-2 font-display text-base font-semibold leading-snug tracking-tight text-ink group-hover:text-moss">{{ item.title }}</h3>
               </div>
             </RouterLink>
           </div>
         </section>
-
       </div>
-    </div>
+    </template>
 
-    <!-- Loading State -->
-    <div v-else-if="isLoading" class="min-h-[60vh] flex items-center justify-center p-4">
+    <!-- Loading -->
+    <div v-else-if="isLoading" class="screen-70 flex items-center justify-center bg-ink px-4">
       <div class="text-center">
-        <div class="w-10 h-10 border-4 border-[#009246]/20 border-t-[#009246] rounded-full animate-spin mx-auto mb-4" />
-        <p class="text-sm text-[#4D4D4D] font-semibold">Memuat artikel...</p>
+        <span class="mx-auto flex h-12 w-12 items-center justify-center">
+          <span class="h-10 w-10 animate-spin rounded-full border-4 border-white/15 border-t-lime-soft" />
+        </span>
+        <p class="mt-4 text-xs font-bold uppercase tracking-[0.14em] text-white/60">Memuat berita...</p>
       </div>
     </div>
 
-    <!-- 404 Article State -->
-    <div v-else class="min-h-screen flex items-center justify-center p-4">
-      <div class="text-center bg-white p-10 rounded-3xl border border-[#E6E6E6] shadow-xl max-w-md">
-        <svg class="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <h2 class="text-2xl font-black text-[#111212] mb-2">Artikel Tidak Ditemukan</h2>
-        <p class="text-xs text-[#4D4D4D] mb-6">Artikel atau berita yang Anda cari mungkin telah dipindahkan atau dihapus.</p>
-        <RouterLink to="/berita" class="inline-block px-6 py-3 bg-[#009246] text-white font-bold text-xs rounded-xl hover:bg-[#006837] transition-colors">
-          Kembali ke Portal Berita
+    <!-- Not found -->
+    <div v-else class="screen-75 relative flex items-center justify-center overflow-hidden bg-ink px-4 py-16 text-paper">
+      <div class="pointer-events-none absolute inset-0 bg-grid-dark opacity-60" />
+      <div class="relative max-w-md text-center">
+        <StarMark :size="42" class="mx-auto animate-spin-slow text-lime-soft" />
+        <p class="mt-8 font-display text-7xl font-bold leading-none tracking-tight text-lime-soft">404</p>
+        <h1 class="mt-4 font-display text-2xl font-semibold tracking-tight text-white">Berita tidak ditemukan<span class="text-lime-soft">.</span></h1>
+        <p class="mt-3 text-sm font-medium leading-relaxed text-white/60">
+          Berita yang Anda cari mungkin telah dipindahkan atau dihapus.
+        </p>
+        <RouterLink to="/berita" class="btn btn-lime mt-7">
+          Kembali ke portal berita
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
         </RouterLink>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 200ms ease, transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 10px);
+}
+</style>

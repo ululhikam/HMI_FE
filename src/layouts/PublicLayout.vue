@@ -16,10 +16,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-[#f8f8f8]">
+  <div class="screen-min flex flex-col bg-ink text-paper">
     <TheNavbar />
-    <!-- navbar height = 64px + 3px accent bar = 67px, use pt-[67px] on pages that need it -->
-    <main class="flex-1">
+    <main class="flex-1 pt-[var(--nav-offset)]">
       <RouterView />
     </main>
     <TheFooter />

@@ -4,6 +4,28 @@ import { articlesService } from '@/api/services'
 import { getErrorMessage } from '@/api/errors'
 import type { Article, ArticleCategory, ArticleInput } from '@/types'
 
+const BOOKMARK_KEY = 'hmi_article_bookmarks'
+const LIKES_KEY = 'hmi_article_likes'
+
+function readStoredSlugs(key: string): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function persistStoredSlugs(key: string, slugs: string[]) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(key, JSON.stringify(slugs))
+  } catch {
+    // Penyimpanan perangkat bisa diblokir mode privat; interaksi tetap jalan di sesi ini.
+  }
+}
+
 export const useArticleStore = defineStore('articles', () => {
   const articles = ref<Article[]>([])
   const selectedCategory = ref<string>('Semua')
@@ -11,7 +33,8 @@ export const useArticleStore = defineStore('articles', () => {
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref('')
-  const bookmarkedSlugs = ref<string[]>([])
+  const bookmarkedSlugs = ref<string[]>(readStoredSlugs(BOOKMARK_KEY))
+  const likedSlugs = ref<string[]>(readStoredSlugs(LIKES_KEY))
 
   let publishedLoaded = false
   let allLoaded = false
@@ -103,7 +126,7 @@ export const useArticleStore = defineStore('articles', () => {
       allLoaded = true
       publishedLoaded = false
     } catch (err) {
-      error.value = getErrorMessage(err, 'Gagal memuat artikel.')
+      error.value = getErrorMessage(err, 'Gagal memuat berita.')
     } finally {
       isLoading.value = false
     }
@@ -121,7 +144,7 @@ export const useArticleStore = defineStore('articles', () => {
       if (!articles.value.some((item) => item.id === article.id)) articles.value.push(article)
       return article
     } catch (err) {
-      error.value = getErrorMessage(err, 'Gagal memuat artikel.')
+      error.value = getErrorMessage(err, 'Gagal memuat berita.')
       return null
     } finally {
       isLoading.value = false
@@ -139,22 +162,32 @@ export const useArticleStore = defineStore('articles', () => {
   }
 
   async function like(slug: string): Promise<{ likes: number; liked: boolean } | null> {
+    error.value = ''
     try {
       const result = await articlesService.like(slug)
       const article = getBySlug(slug)
       if (article) article.likes = result.likes
+      if (result.liked && !likedSlugs.value.includes(slug)) {
+        likedSlugs.value = [...likedSlugs.value, slug]
+        persistStoredSlugs(LIKES_KEY, likedSlugs.value)
+      }
       return result
     } catch (err) {
-      error.value = getErrorMessage(err, 'Gagal menyukai artikel.')
+      error.value = getErrorMessage(err, 'Gagal menyukai berita.')
       return null
     }
   }
 
   async function unlike(slug: string): Promise<{ likes: number; liked: boolean } | null> {
+    error.value = ''
     try {
       const result = await articlesService.unlike(slug)
       const article = getBySlug(slug)
       if (article) article.likes = result.likes
+      if (!result.liked) {
+        likedSlugs.value = likedSlugs.value.filter((item) => item !== slug)
+        persistStoredSlugs(LIKES_KEY, likedSlugs.value)
+      }
       return result
     } catch (err) {
       error.value = getErrorMessage(err, 'Gagal membatalkan suka.')
@@ -162,24 +195,33 @@ export const useArticleStore = defineStore('articles', () => {
     }
   }
 
+  function isLiked(slug: string): boolean {
+    return likedSlugs.value.includes(slug)
+  }
+
   function isBookmarked(slug: string): boolean {
     return bookmarkedSlugs.value.includes(slug)
   }
 
-  /** Toggle bookmark artikel; status disimpan di store untuk sesi berjalan. */
+  /** Toggle simpanan berita; status dipertahankan di perangkat ini. */
   async function toggleBookmark(slug: string): Promise<boolean> {
+    error.value = ''
     const currentlyBookmarked = isBookmarked(slug)
     try {
       if (currentlyBookmarked) {
         await articlesService.unbookmark(slug)
         bookmarkedSlugs.value = bookmarkedSlugs.value.filter((item) => item !== slug)
+        persistStoredSlugs(BOOKMARK_KEY, bookmarkedSlugs.value)
         return false
       }
       await articlesService.bookmark(slug)
-      if (!bookmarkedSlugs.value.includes(slug)) bookmarkedSlugs.value.push(slug)
+      if (!bookmarkedSlugs.value.includes(slug)) {
+        bookmarkedSlugs.value = [...bookmarkedSlugs.value, slug]
+        persistStoredSlugs(BOOKMARK_KEY, bookmarkedSlugs.value)
+      }
       return true
     } catch (err) {
-      error.value = getErrorMessage(err, 'Gagal memperbarui bookmark.')
+      error.value = getErrorMessage(err, 'Gagal memperbarui simpanan berita.')
       return currentlyBookmarked
     }
   }
@@ -193,7 +235,7 @@ export const useArticleStore = defineStore('articles', () => {
       allLoaded = true
       return article
     } catch (err) {
-      error.value = getErrorMessage(err, 'Gagal menyimpan artikel.')
+      error.value = getErrorMessage(err, 'Gagal menyimpan berita.')
       return null
     } finally {
       isSaving.value = false
@@ -209,7 +251,7 @@ export const useArticleStore = defineStore('articles', () => {
       if (index !== -1) articles.value[index] = updated
       return updated
     } catch (err) {
-      error.value = getErrorMessage(err, 'Gagal memperbarui artikel.')
+      error.value = getErrorMessage(err, 'Gagal memperbarui berita.')
       return null
     } finally {
       isSaving.value = false
@@ -224,7 +266,7 @@ export const useArticleStore = defineStore('articles', () => {
       articles.value = articles.value.filter((article) => article.id !== id)
       return true
     } catch (err) {
-      error.value = getErrorMessage(err, 'Gagal menghapus artikel.')
+      error.value = getErrorMessage(err, 'Gagal menghapus berita.')
       return false
     } finally {
       isSaving.value = false
@@ -244,7 +286,9 @@ export const useArticleStore = defineStore('articles', () => {
     isSaving,
     error,
     bookmarkedSlugs,
+    likedSlugs,
     categories,
+    publishedArticles,
     filteredArticles,
     heroArticle,
     featuredSideArticles,
@@ -259,6 +303,7 @@ export const useArticleStore = defineStore('articles', () => {
     like,
     unlike,
     isBookmarked,
+    isLiked,
     toggleBookmark,
     createArticle,
     updateArticle,

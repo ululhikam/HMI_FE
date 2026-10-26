@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useArticleStore } from '@/stores/articles'
 import { useAuthStore } from '@/stores/auth'
 import type { ArticleCategory, ArticleStatus } from '@/types'
@@ -13,9 +13,13 @@ const store = useArticleStore()
 const auth = useAuthStore()
 
 const articleId = computed(() => route.params.id as string | undefined)
-const isEditing = computed(() => !!articleId.value)
+const isEditing = computed(() => Boolean(articleId.value))
 
 const categories: ArticleCategory[] = ['Kegiatan', 'Opini', 'Press Release', 'Pengumuman']
+const statusOptions: Array<{ value: ArticleStatus; label: string }> = [
+  { value: 'draft', label: 'Draf' },
+  { value: 'published', label: 'Publik' },
+]
 
 function emptyForm() {
   return {
@@ -37,10 +41,17 @@ const form = reactive(emptyForm())
 const formError = ref('')
 const isLoading = ref(false)
 
+const wordCount = computed(() => {
+  const text = form.content.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ')
+  return text.split(/\s+/).filter(Boolean).length
+})
+
+const characterCount = computed(() => form.content.replace(/<[^>]+>/g, '').length)
+
 onMounted(async () => {
   await store.fetchAll()
   if (isEditing.value) {
-    const article = store.articles.find((a) => a.id === articleId.value)
+    const article = store.articles.find((item) => item.id === articleId.value)
     if (article) {
       Object.assign(form, {
         title: article.title,
@@ -56,22 +67,28 @@ onMounted(async () => {
         readTime: article.readTime ?? '',
       })
     } else {
-      formError.value = 'Artikel tidak ditemukan.'
+      formError.value = 'Berita tidak ditemukan.'
     }
   }
+
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 async function handleSave() {
   formError.value = ''
   if (!form.title.trim()) {
-    formError.value = 'Judul artikel wajib diisi.'
+    formError.value = 'Judul berita wajib diisi.'
     return
   }
 
   isLoading.value = true
   const tags = form.tagsText
     .split(',')
-    .map((t) => t.trim())
+    .map((tag) => tag.trim())
     .filter(Boolean)
 
   const input = {
@@ -97,7 +114,14 @@ async function handleSave() {
   if (result) {
     router.push({ name: 'admin-articles' })
   } else {
-    formError.value = store.error || 'Gagal menyimpan artikel.'
+    formError.value = store.error || 'Gagal menyimpan berita.'
+  }
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault()
+    void handleSave()
   }
 }
 
@@ -107,180 +131,184 @@ function goBack() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#F7F7F5]">
-    <!-- Top Bar -->
-    <div class="bg-white border-b border-[#E6E6E6] sticky top-0 z-30 shadow-sm">
-      <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-        <!-- Back + Breadcrumb -->
-        <div class="flex items-center gap-3 min-w-0">
-          <button
-            @click="goBack"
-            class="w-9 h-9 flex items-center justify-center rounded-xl text-[#4D4D4D] hover:bg-[#F7F7F5] hover:text-[#111212] transition-colors shrink-0 border border-[#E6E6E6]"
-            title="Kembali ke Daftar Artikel"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div class="min-w-0">
-            <p class="text-xs text-[#4D4D4D]">Berita &amp; Artikel /</p>
-            <h1 class="text-sm font-extrabold text-[#111212] truncate">
-              {{ isEditing ? 'Edit Artikel' : 'Artikel Baru' }}
-            </h1>
-          </div>
+  <div class="space-y-5">
+    <!-- Header -->
+    <div class="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+      <div class="flex items-start gap-3">
+        <button
+          type="button"
+          class="mt-1 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-line bg-white text-muted transition-colors hover:border-ink hover:text-ink"
+          title="Kembali ke daftar berita"
+          @click="goBack"
+        >
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <div>
+          <span class="eyebrow eyebrow-ink">{{ isEditing ? 'Editor berita' : 'Berita baru' }}</span>
+          <h1 class="display-md mt-4">{{ isEditing ? 'Edit berita' : 'Tulis berita' }}<span class="text-moss">.</span></h1>
+          <p class="mt-2 text-xs font-semibold leading-relaxed text-muted">
+            {{ isEditing ? 'Perbarui konten dan informasi publikasi berita.' : 'Susun konten baru untuk portal HMI Insan Cita.' }}
+          </p>
         </div>
+      </div>
 
-        <!-- Status toggle + Save -->
-        <div class="flex items-center gap-2 shrink-0">
-          <div class="hidden sm:flex items-center p-0.5 bg-[#F7F7F5] border border-[#E6E6E6] rounded-xl text-xs font-bold gap-0.5">
-            <button
-              v-for="st in (['draft', 'published'] as ArticleStatus[])"
-              :key="st"
-              @click="form.status = st"
-              class="px-3 py-1.5 rounded-lg transition-all"
-              :class="form.status === st
-                ? 'bg-white text-[#009246] shadow-sm'
-                : 'text-[#4D4D4D] hover:text-[#111212]'"
-            >
-              {{ st === 'published' ? 'Publik' : 'Draft' }}
-            </button>
-          </div>
-
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-0.5 rounded-full border border-line bg-white p-1">
           <button
-            @click="handleSave"
-            :disabled="store.isSaving || isLoading"
-            class="inline-flex items-center gap-2 px-5 py-2 bg-[#009246] hover:bg-[#006837] disabled:opacity-60 text-white font-bold text-sm rounded-xl transition-all shadow-lg shadow-[#009246]/20"
+            v-for="option in statusOptions"
+            :key="option.value"
+            type="button"
+            class="rounded-full px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.1em] transition-all"
+            :class="form.status === option.value ? 'bg-ink text-lime-soft' : 'text-muted hover:text-ink'"
+            @click="form.status = option.value"
           >
-            <svg v-if="store.isSaving || isLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
-            <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-            {{ store.isSaving || isLoading ? 'Menyimpan...' : 'Simpan' }}
+            {{ option.label }}
           </button>
         </div>
+        <button
+          type="button"
+          :disabled="store.isSaving || isLoading"
+          class="admin-btn admin-btn-lime"
+          @click="handleSave"
+        >
+          <svg v-if="store.isSaving || isLoading" class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <svg v-else class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          {{ store.isSaving || isLoading ? 'Menyimpan...' : 'Simpan berita' }}
+        </button>
       </div>
     </div>
 
-    <!-- Body -->
-    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-      <p
-        v-if="formError"
-        class="mb-5 p-4 bg-red-50 border border-red-200 text-red-600 text-sm font-medium rounded-2xl flex items-center gap-2"
-      >
-        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        {{ formError }}
-      </p>
+    <p v-if="formError" class="flex items-center gap-2 rounded-[1rem] border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-600">
+      <svg class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" />
+      </svg>
+      {{ formError }}
+    </p>
 
-      <div class="grid lg:grid-cols-[1fr_296px] gap-6 items-start">
-        <!-- ── Main Column ── -->
-        <div class="space-y-4">
-          <!-- Judul -->
-          <div class="bg-white rounded-2xl border border-[#E6E6E6] p-5 shadow-sm">
-            <label class="text-[10px] font-bold text-[#4D4D4D] uppercase tracking-widest block mb-2">
-              Judul Artikel <span class="text-red-500">*</span>
-            </label>
-            <input
-              v-model="form.title"
-              type="text"
-              placeholder="Tuliskan judul artikel yang menarik..."
-              class="w-full text-xl font-bold text-[#111212] bg-transparent border-none outline-none placeholder-[#C9C9C9]"
-            />
+    <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
+      <!-- Main -->
+      <div class="space-y-4">
+        <section class="admin-card p-5 sm:p-6">
+          <label class="admin-label" for="article-title">Judul berita <span class="text-red-500">*</span></label>
+          <input
+            id="article-title"
+            v-model="form.title"
+            type="text"
+            placeholder="Tuliskan judul berita yang jelas dan menarik..."
+            class="w-full border-0 bg-transparent p-0 font-display text-2xl font-bold leading-tight tracking-tight text-ink placeholder:text-muted focus:outline-none sm:text-3xl"
+          />
+          <div class="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-3">
+            <span class="text-[8px] font-bold uppercase tracking-[0.1em] text-muted">{{ form.title.length }} karakter</span>
+            <span class="h-1 w-1 rounded-full bg-line" />
+            <span class="text-[8px] font-bold uppercase tracking-[0.1em] text-muted">{{ form.status === 'published' ? 'Akan tampil di portal' : 'Disimpan sebagai draf' }}</span>
           </div>
+        </section>
 
-          <!-- Ringkasan -->
-          <div class="bg-white rounded-2xl border border-[#E6E6E6] p-5 shadow-sm">
-            <label class="text-[10px] font-bold text-[#4D4D4D] uppercase tracking-widest block mb-2">Ringkasan</label>
-            <textarea
-              v-model="form.excerpt"
-              rows="2"
-              placeholder="Ringkasan singkat yang tampil di halaman daftar berita..."
-              class="w-full text-sm text-[#4D4D4D] bg-transparent border-none outline-none placeholder-[#C9C9C9] resize-none leading-relaxed"
-            />
-          </div>
+        <section class="admin-card p-5">
+          <label class="admin-label" for="article-excerpt">Ringkasan</label>
+          <textarea
+            id="article-excerpt"
+            v-model="form.excerpt"
+            rows="2"
+            placeholder="Ringkasan singkat yang tampil di halaman daftar berita..."
+            class="w-full resize-none border-0 bg-transparent p-0 text-sm font-medium leading-relaxed text-ink/70 placeholder:text-muted focus:outline-none"
+          />
+        </section>
 
-          <!-- Tiptap Editor -->
-          <div class="bg-white rounded-2xl border border-[#E6E6E6] shadow-sm overflow-hidden">
-            <div class="px-5 pt-4 pb-2 border-b border-[#E6E6E6]">
-              <p class="text-[10px] font-bold text-[#4D4D4D] uppercase tracking-widest">Isi Artikel</p>
-            </div>
-            <TiptapEditor
-              v-model="form.content"
-              placeholder="Mulai menulis konten artikel di sini..."
-            />
-          </div>
-        </div>
-
-        <!-- ── Sidebar ── -->
-        <div class="space-y-4">
-          <!-- Status (mobile only) -->
-          <div class="sm:hidden bg-white rounded-2xl border border-[#E6E6E6] p-4 shadow-sm">
-            <label class="text-[10px] font-bold text-[#4D4D4D] uppercase tracking-widest block mb-2">Status Publikasi</label>
-            <div class="flex gap-2">
-              <button
-                v-for="st in (['draft', 'published'] as ArticleStatus[])"
-                :key="st"
-                @click="form.status = st"
-                class="flex-1 py-2 rounded-xl text-xs font-bold border transition-all"
-                :class="form.status === st
-                  ? 'bg-[#009246] text-white border-[#009246]'
-                  : 'bg-white text-[#4D4D4D] border-[#E6E6E6] hover:border-[#009246]'"
-              >
-                {{ st === 'published' ? 'Publik' : 'Draft' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Cover Image -->
-          <div class="bg-white rounded-2xl border border-[#E6E6E6] p-4 shadow-sm">
-            <ImageUploadField
-              v-model="form.coverImage"
-              label="Foto Cover Artikel"
-              aspect-ratio="video"
-            />
-          </div>
-
-          <!-- Metadata -->
-          <div class="bg-white rounded-2xl border border-[#E6E6E6] p-4 shadow-sm space-y-3.5">
-            <p class="text-[10px] font-bold text-[#4D4D4D] uppercase tracking-widest">Informasi Artikel</p>
-
+        <section class="admin-card overflow-hidden">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-3.5">
             <div>
-              <label class="text-xs font-semibold text-[#4D4D4D] block mb-1">Kategori</label>
-              <select v-model="form.category" class="w-full px-3 py-2 bg-[#F7F7F5] border border-[#E6E6E6] rounded-xl text-sm focus:outline-none focus:border-[#009246]">
-                <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+              <p class="admin-label mb-0">Isi berita</p>
+              <p class="mt-1 text-[8px] font-semibold text-muted">Gunakan editor untuk menyusun paragraf, daftar, dan kutipan.</p>
+            </div>
+            <div class="flex items-center gap-2 text-[8px] font-bold uppercase tracking-[0.08em] text-muted">
+              <span>{{ wordCount }} kata</span>
+              <span class="h-1 w-1 rounded-full bg-line" />
+              <span>{{ characterCount }} karakter</span>
+            </div>
+          </div>
+          <TiptapEditor
+            v-model="form.content"
+            placeholder="Mulai menulis konten berita di sini..."
+          />
+        </section>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="space-y-4 xl:sticky xl:top-[calc(var(--admin-bar-height)+1rem)]">
+        <section class="admin-card p-4">
+          <div class="flex items-center justify-between">
+            <p class="admin-label mb-0">Publikasi</p>
+            <span class="rounded-full px-2 py-1 text-[7px] font-black uppercase tracking-[0.08em]" :class="form.status === 'published' ? 'bg-lime/30 text-forest' : 'bg-amber-50 text-amber-700'">
+              {{ form.status === 'published' ? 'Publik' : 'Draf' }}
+            </span>
+          </div>
+          <div class="mt-3 grid gap-3">
+            <div>
+              <label class="admin-label" for="article-category">Kategori</label>
+              <select id="article-category" v-model="form.category" class="admin-input">
+                <option v-for="category in categories" :key="category" :value="category">{{ category }}</option>
               </select>
             </div>
-
             <div>
-              <label class="text-xs font-semibold text-[#4D4D4D] block mb-1">Slug URL</label>
-              <input v-model="form.slug" type="text" placeholder="otomatis dari judul" class="w-full px-3 py-2 bg-[#F7F7F5] border border-[#E6E6E6] rounded-xl text-sm focus:outline-none focus:border-[#009246]" />
+              <label class="admin-label" for="article-slug">Slug URL</label>
+              <input id="article-slug" v-model="form.slug" type="text" placeholder="otomatis dari judul" class="admin-input" />
             </div>
-
             <div>
-              <label class="text-xs font-semibold text-[#4D4D4D] block mb-1">Penulis</label>
-              <input v-model="form.author" type="text" class="w-full px-3 py-2 bg-[#F7F7F5] border border-[#E6E6E6] rounded-xl text-sm focus:outline-none focus:border-[#009246]" />
-            </div>
-
-            <div>
-              <label class="text-xs font-semibold text-[#4D4D4D] block mb-1">Jabatan Penulis</label>
-              <input v-model="form.authorRole" type="text" class="w-full px-3 py-2 bg-[#F7F7F5] border border-[#E6E6E6] rounded-xl text-sm focus:outline-none focus:border-[#009246]" />
-            </div>
-
-            <div>
-              <label class="text-xs font-semibold text-[#4D4D4D] block mb-1">Tag <span class="text-[#C9C9C9] font-normal">(pisah koma)</span></label>
-              <input v-model="form.tagsText" type="text" placeholder="Kaderisasi, NDP" class="w-full px-3 py-2 bg-[#F7F7F5] border border-[#E6E6E6] rounded-xl text-sm focus:outline-none focus:border-[#009246]" />
-            </div>
-
-            <div>
-              <label class="text-xs font-semibold text-[#4D4D4D] block mb-1">Estimasi Baca</label>
-              <input v-model="form.readTime" type="text" placeholder="5 menit" class="w-full px-3 py-2 bg-[#F7F7F5] border border-[#E6E6E6] rounded-xl text-sm focus:outline-none focus:border-[#009246]" />
+              <label class="admin-label" for="article-read-time">Estimasi baca</label>
+              <input id="article-read-time" v-model="form.readTime" type="text" placeholder="5 menit" class="admin-input" />
             </div>
           </div>
-        </div>
+        </section>
+
+        <section class="admin-card p-4">
+          <ImageUploadField
+            v-model="form.coverImage"
+            label="Foto cover berita"
+            aspect-ratio="video"
+          />
+        </section>
+
+        <section class="admin-card p-4">
+          <p class="admin-label">Penulis & metadata</p>
+          <div class="mt-3 grid gap-3">
+            <div>
+              <label class="admin-label" for="article-author">Nama penulis</label>
+              <input id="article-author" v-model="form.author" type="text" class="admin-input" />
+            </div>
+            <div>
+              <label class="admin-label" for="article-role">Jabatan penulis</label>
+              <input id="article-role" v-model="form.authorRole" type="text" class="admin-input" />
+            </div>
+            <div>
+              <label class="admin-label" for="article-tags">Tag <span class="normal-case tracking-normal text-muted">(pisah koma)</span></label>
+              <input id="article-tags" v-model="form.tagsText" type="text" placeholder="Kaderisasi, NDP" class="admin-input" />
+            </div>
+          </div>
+        </section>
+
+        <section class="rounded-[1.1rem] border border-dashed border-ink/20 p-4">
+          <p class="text-[8px] font-black uppercase tracking-[0.12em] text-muted">Pintasan</p>
+          <p class="mt-2 text-[10px] font-semibold leading-relaxed text-ink/55">
+            Tekan <kbd class="rounded border border-line bg-white px-1.5 py-0.5 font-mono text-[9px]">Ctrl</kbd> + <kbd class="rounded border border-line bg-white px-1.5 py-0.5 font-mono text-[9px]">S</kbd> untuk menyimpan berita tanpa kembali ke daftar.
+          </p>
+        </section>
+
+        <button
+          type="button"
+          :disabled="store.isSaving || isLoading"
+          class="admin-btn admin-btn-dark w-full"
+          @click="handleSave"
+        >
+          {{ store.isSaving || isLoading ? 'Menyimpan...' : 'Simpan berita' }}
+        </button>
       </div>
     </div>
   </div>

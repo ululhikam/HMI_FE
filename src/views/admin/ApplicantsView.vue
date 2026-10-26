@@ -1,194 +1,368 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useApplicantStore } from '@/stores/applicants'
+import { useSiteStore } from '@/stores/site'
 import type { ApplicantStatus, LK1Applicant } from '@/types'
 
 const store = useApplicantStore()
+const siteStore = useSiteStore()
 const detail = ref<LK1Applicant | null>(null)
+const toastMessage = ref('')
+const showToast = ref(false)
+const waPrompt = ref<{ applicant: LK1Applicant; message: string; url: string } | null>(null)
 
 const filters: Array<{ value: ApplicantStatus | 'Semua'; label: string }> = [
   { value: 'Semua', label: 'Semua' },
-  { value: 'pending', label: 'Pending' },
+  { value: 'pending', label: 'Menunggu' },
   { value: 'accepted', label: 'Diterima' },
   { value: 'rejected', label: 'Ditolak' },
 ]
 
+const summary = computed(() => [
+  { label: 'Total pendaftar', value: store.stats.total || store.applicants.length },
+  { label: 'Menunggu review', value: store.stats.pending },
+  { label: 'Diterima', value: store.stats.accepted },
+  { label: 'Ditolak', value: store.stats.rejected },
+])
+
+const hasFilters = computed(() => Boolean(store.search) || store.statusFilter !== 'Semua')
+
 function statusLabel(status: ApplicantStatus) {
-  return status === 'pending' ? 'Pending' : status === 'accepted' ? 'Diterima' : 'Ditolak'
+  return status === 'pending' ? 'Menunggu' : status === 'accepted' ? 'Diterima' : 'Ditolak'
 }
 
 function statusClass(status: ApplicantStatus) {
-  return {
-    'bg-yellow-100 text-yellow-700': status === 'pending',
-    'bg-green-100 text-green-700': status === 'accepted',
-    'bg-red-100 text-red-700': status === 'rejected',
+  return status === 'accepted'
+    ? 'bg-lime/30 text-forest'
+    : status === 'rejected'
+      ? 'bg-red-50 text-red-600'
+      : 'bg-amber-50 text-amber-700'
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+}
+
+function triggerToast(message: string) {
+  toastMessage.value = message
+  showToast.value = true
+  setTimeout(() => {
+    showToast.value = false
+  }, 3200)
+}
+
+function normalizeWhatsAppNumber(phone: string) {
+  let digits = phone.replace(/\D/g, '')
+  if (!digits) return ''
+  if (digits.startsWith('00')) digits = digits.slice(2)
+  if (digits.startsWith('620')) digits = `62${digits.slice(3)}`
+  if (digits.startsWith('62')) return digits
+  if (digits.startsWith('0')) return `62${digits.slice(1)}`
+  if (digits.startsWith('8')) return `62${digits}`
+  return digits
+}
+
+function acceptanceMessage(applicant: LK1Applicant) {
+  const organization = siteStore.settings.organizationName || 'HMI Komisariat Insan Cita'
+  const chapter = siteStore.settings.chapterName ? ` ${siteStore.settings.chapterName}` : ''
+  return [
+    `Selamat, ${applicant.fullName}!`,
+    '',
+    `Pendaftaran Anda sebagai peserta Latihan Kader 1 (LK 1) ${organization}${chapter} telah DITERIMA.`,
+    '',
+    'Silakan menunggu informasi jadwal, kelompok, dan teknis pelaksanaan dari panitia. Pastikan nomor WhatsApp ini aktif agar tidak tertinggal informasi.',
+    '',
+    'Sampai jumpa di proses kaderisasi.',
+    'Yakin Usaha Sampai!',
+  ].join('\n')
+}
+
+function whatsappUrl(applicant: LK1Applicant) {
+  const number = normalizeWhatsAppNumber(applicant.phone)
+  if (!/^62\d{8,13}$/.test(number)) return ''
+  return `https://wa.me/${number}?text=${encodeURIComponent(acceptanceMessage(applicant))}`
+}
+
+function openWhatsApp(applicant: LK1Applicant) {
+  const url = whatsappUrl(applicant)
+  if (!url) {
+    triggerToast('Nomor WhatsApp pendaftar belum tersedia atau tidak valid.')
+    return
   }
+  window.open(url, '_blank', 'noopener,noreferrer')
+  waPrompt.value = null
 }
 
 async function updateStatus(applicant: LK1Applicant, status: ApplicantStatus) {
-  const updated = await store.updateStatus(applicant.id, status)
-  const current = detail.value
-  if (updated && current && current.id === applicant.id) {
-    detail.value = { ...current, status }
+  const ok = await store.updateStatus(applicant.id, status)
+  if (!ok) {
+    triggerToast(store.error || 'Gagal memperbarui status pendaftar.')
+    return
   }
+  if (detail.value?.id === applicant.id) {
+    const updated = store.applicants.find((item) => item.id === applicant.id)
+    detail.value = updated ?? { ...detail.value, status }
+  }
+  if (status === 'accepted') {
+    const updated = store.applicants.find((item) => item.id === applicant.id) ?? { ...applicant, status }
+    const url = whatsappUrl(updated)
+    if (url) {
+      waPrompt.value = { applicant: updated, message: acceptanceMessage(updated), url }
+      triggerToast('Pendaftar diterima. Kirim konfirmasi penerimaan melalui WhatsApp.')
+    } else {
+      triggerToast('Pendaftar diterima, tetapi nomor WhatsApp tidak valid. Hubungi pendaftar secara manual.')
+    }
+    return
+  }
+  triggerToast(
+    status === 'rejected'
+      ? 'Pendaftar ditandai sebagai ditolak.'
+      : 'Status pendaftar diperbarui.',
+  )
 }
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('id-ID', {
     day: 'numeric',
-    month: 'short',
+    month: 'long',
     year: 'numeric',
   })
 }
 
+function resetFilters() {
+  store.search = ''
+  store.statusFilter = 'Semua'
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  if (waPrompt.value) {
+    waPrompt.value = null
+    return
+  }
+  detail.value = null
+}
+
+watch([detail, waPrompt], ([currentDetail, currentPrompt]) => {
+  document.body.style.overflow = currentDetail || currentPrompt ? 'hidden' : ''
+})
+
 onMounted(() => {
-  void store.fetchApplicants()
+  void store.fetchApplicants(true)
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  document.body.style.overflow = ''
 })
 </script>
 
 <template>
-  <div>
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+  <div class="space-y-5">
+    <!-- Toast -->
+    <Transition name="toast">
+      <div
+        v-if="showToast"
+        class="fixed bottom-5 left-1/2 z-[120] flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-5 py-3 text-[11px] font-bold text-white shadow-2xl"
+      >
+        <span class="flex h-5 w-5 items-center justify-center rounded-full bg-lime text-white">
+          <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        {{ toastMessage }}
+      </div>
+    </Transition>
+
+    <!-- Header -->
+    <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div>
-        <h1 class="text-2xl font-extrabold text-[#111212]">Pendaftar LK 1</h1>
-        <p class="text-[#4D4D4D] text-sm mt-0.5">
-          {{ store.stats.total || store.applicants.length }} total pendaftar
+        <span class="eyebrow eyebrow-ink">Penerimaan kader</span>
+        <h1 class="display-md mt-4">Pendaftar LK 1<span class="text-moss">.</span></h1>
+        <p class="mt-2 max-w-xl text-xs font-semibold leading-relaxed text-muted">
+          Tinjau formulir calon peserta Latihan Kader 1 dan tentukan status penerimaan.
         </p>
       </div>
-      <button
-        @click="store.exportCsv"
-        class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#006837] hover:bg-[#004a27] text-white font-bold text-sm rounded-xl transition-all"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-        </svg>
-        Export CSV
-      </button>
-    </div>
-
-    <p v-if="store.error && !detail" class="mb-4 text-sm text-red-500">{{ store.error }}</p>
-
-    <!-- Stats -->
-    <div class="grid grid-cols-3 gap-4 mb-6">
-      <div class="bg-white rounded-2xl border border-[#E6E6E6] p-4 text-center">
-        <div class="text-2xl font-extrabold text-yellow-600">{{ store.stats.pending }}</div>
-        <div class="text-xs text-[#4D4D4D] font-semibold mt-1">Pending</div>
-      </div>
-      <div class="bg-white rounded-2xl border border-[#E6E6E6] p-4 text-center">
-        <div class="text-2xl font-extrabold text-green-600">{{ store.stats.accepted }}</div>
-        <div class="text-xs text-[#4D4D4D] font-semibold mt-1">Diterima</div>
-      </div>
-      <div class="bg-white rounded-2xl border border-[#E6E6E6] p-4 text-center">
-        <div class="text-2xl font-extrabold text-red-500">{{ store.stats.rejected }}</div>
-        <div class="text-xs text-[#4D4D4D] font-semibold mt-1">Ditolak</div>
-      </div>
-    </div>
-
-    <!-- Search & filter -->
-    <div class="flex flex-wrap items-center gap-3 mb-5">
-      <div class="relative max-w-sm flex-1 min-w-[220px]">
-        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#C9C9C9]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
-        </svg>
-        <input
-          v-model="store.search"
-          type="text"
-          placeholder="Cari nama atau NIM..."
-          class="w-full pl-10 pr-8 py-2.5 border border-[#E6E6E6] rounded-xl text-sm focus:outline-none focus:border-[#009246] transition-all"
-        />
-        <button v-if="store.search" @click="store.search = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-[#C9C9C9] hover:text-[#4D4D4D]" title="Hapus pencarian">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+        <button type="button" class="admin-btn admin-btn-ghost" :disabled="store.isLoading" @click="store.fetchApplicants(true)">
+          <svg class="h-3.5 w-3.5" :class="{ 'animate-spin': store.isLoading }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
+          Segarkan
+        </button>
+        <button type="button" class="admin-btn admin-btn-dark" :disabled="!store.filteredApplicants.length" @click="store.exportCsv">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          Ekspor CSV
         </button>
       </div>
+    </div>
 
-      <div class="flex gap-1.5">
-        <button
-          v-for="filter in filters"
-          :key="filter.value"
-          @click="store.statusFilter = filter.value"
-          class="px-3.5 py-2 rounded-xl text-xs font-bold border transition-all"
-          :class="store.statusFilter === filter.value
-            ? 'bg-[#009246] text-white border-[#009246]'
-            : 'bg-white text-[#4D4D4D] border-[#E6E6E6] hover:border-[#009246]'"
-        >
-          {{ filter.label }}
-        </button>
+    <p v-if="store.error && !detail" class="rounded-[1rem] border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-600">
+      {{ store.error }}
+    </p>
+
+    <!-- Summary -->
+    <div class="admin-card grid grid-cols-2 divide-x divide-line sm:grid-cols-4">
+      <div v-for="(item, index) in summary" :key="item.label" class="p-4 sm:p-5" :class="index >= 2 ? 'border-t border-line sm:border-t-0' : ''">
+        <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">{{ item.label }}</p>
+        <p class="mt-2 font-display text-2xl font-bold leading-none tracking-tight text-ink">{{ item.value }}</p>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="admin-card p-3 sm:p-4">
+      <div class="flex flex-col gap-3 xl:flex-row xl:items-center">
+        <div class="relative flex-1 xl:max-w-sm">
+          <svg class="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-4-4" stroke-linecap="round" />
+          </svg>
+          <input v-model="store.search" type="search" placeholder="Cari nama, NIM, atau universitas..." class="admin-input pl-9" />
+        </div>
+
+        <div class="hide-scrollbar flex items-center gap-1.5 overflow-x-auto">
+          <button
+            v-for="filter in filters"
+            :key="filter.value"
+            type="button"
+            class="flex-shrink-0 rounded-full border px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.08em] transition-colors"
+            :class="store.statusFilter === filter.value ? 'border-ink bg-ink text-lime-soft' : 'border-line bg-white text-muted hover:border-ink/30 hover:text-ink'"
+            @click="store.statusFilter = filter.value"
+          >
+            {{ filter.label }}
+          </button>
+        </div>
+
+        <div class="flex items-center gap-3 xl:ml-auto">
+          <span class="text-[8px] font-bold uppercase tracking-[0.1em] text-muted">{{ store.filteredApplicants.length }} pendaftar</span>
+          <button v-if="hasFilters" type="button" class="text-[8px] font-black uppercase tracking-[0.08em] text-moss transition-colors hover:text-ink" @click="resetFilters">
+            Reset
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- Table -->
-    <div class="bg-white rounded-2xl shadow-sm border border-[#E6E6E6] overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+    <div class="admin-card overflow-hidden">
+      <div v-if="store.isLoading" class="p-14 text-center">
+        <span class="mx-auto block h-7 w-7 animate-spin rounded-full border-2 border-line border-t-moss" />
+        <p class="mt-3 text-[10px] font-semibold text-muted">Memuat pendaftar...</p>
+      </div>
+
+      <div v-else-if="store.filteredApplicants.length === 0" class="p-14 text-center">
+        <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-paper text-moss">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <p class="mt-4 text-xs font-bold text-ink">{{ hasFilters ? 'Tidak ada pendaftar yang cocok.' : 'Belum ada pendaftar LK 1.' }}</p>
+        <p class="mx-auto mt-1.5 max-w-sm text-[10px] font-semibold leading-relaxed text-muted">
+          {{ hasFilters ? 'Ubah kata kunci atau status untuk menemukan pendaftar lain.' : 'Formulir pendaftaran dari halaman publik akan muncul di sini.' }}
+        </p>
+        <button v-if="hasFilters" type="button" class="admin-btn admin-btn-ghost mt-4" @click="resetFilters">Reset filter</button>
+      </div>
+
+      <div v-else class="overflow-x-auto">
+        <table class="admin-table">
           <thead>
-            <tr class="bg-[#F7F7F5] border-b border-[#E6E6E6]">
-              <th class="text-left px-5 py-3 text-xs font-bold text-[#4D4D4D] uppercase tracking-wider">Nama / NIM</th>
-              <th class="text-left px-4 py-3 text-xs font-bold text-[#4D4D4D] uppercase tracking-wider hidden md:table-cell">Universitas</th>
-              <th class="text-left px-4 py-3 text-xs font-bold text-[#4D4D4D] uppercase tracking-wider hidden lg:table-cell">Kontak</th>
-              <th class="text-left px-4 py-3 text-xs font-bold text-[#4D4D4D] uppercase tracking-wider">Status</th>
-              <th class="text-left px-4 py-3 text-xs font-bold text-[#4D4D4D] uppercase tracking-wider">Aksi</th>
+            <tr>
+              <th>Pendaftar</th>
+              <th class="hidden md:table-cell">Kampus</th>
+              <th class="hidden xl:table-cell">Kontak</th>
+              <th class="hidden lg:table-cell">Tanggal daftar</th>
+              <th>Status</th>
+              <th class="text-right">Aksi</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-[#E6E6E6]">
-            <tr v-for="ap in store.filteredApplicants" :key="ap.id" class="hover:bg-[#F7F7F5] transition-colors">
-              <td class="px-5 py-3">
-                <button @click="detail = ap" class="font-semibold text-[#111212] text-left hover:text-[#009246] transition-colors">
-                  {{ ap.fullName }}
-                </button>
-                <div class="text-xs text-[#4D4D4D]">{{ ap.nim }} · {{ ap.faculty }}</div>
+          <tbody>
+            <tr v-for="applicant in store.filteredApplicants" :key="applicant.id">
+              <td class="max-w-[260px]">
+                <div class="flex items-center gap-2.5">
+                  <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-paper text-[8px] font-black text-moss">
+                    {{ initials(applicant.fullName) }}
+                  </span>
+                  <div class="min-w-0">
+                    <button type="button" class="block max-w-full truncate text-left text-[11px] font-extrabold text-ink transition-colors hover:text-moss" @click="detail = applicant">
+                      {{ applicant.fullName }}
+                    </button>
+                    <p class="mt-0.5 truncate text-[9px] font-semibold text-muted">{{ applicant.nim }} · {{ applicant.faculty }}</p>
+                  </div>
+                </div>
               </td>
-              <td class="px-4 py-3 text-xs text-[#4D4D4D] hidden md:table-cell">{{ ap.university }}</td>
-              <td class="px-4 py-3 hidden lg:table-cell">
-                <div class="text-xs text-[#4D4D4D]">{{ ap.email }}</div>
-                <div class="text-xs text-[#4D4D4D]">{{ ap.phone }}</div>
+              <td class="hidden md:table-cell">
+                <p class="max-w-[180px] truncate text-[10px] font-bold text-ink">{{ applicant.university }}</p>
+                <p class="mt-0.5 max-w-[180px] truncate text-[9px] font-semibold text-muted">{{ applicant.major }}</p>
               </td>
-              <td class="px-4 py-3">
-                <span class="text-xs font-bold px-2.5 py-0.5 rounded-full" :class="statusClass(ap.status)">
-                  {{ statusLabel(ap.status) }}
+              <td class="hidden xl:table-cell">
+                <a :href="`mailto:${applicant.email}`" class="block max-w-[180px] truncate text-[10px] font-semibold text-muted hover:text-moss">{{ applicant.email }}</a>
+                <a :href="`tel:${applicant.phone}`" class="mt-0.5 block text-[9px] font-semibold text-muted hover:text-moss">{{ applicant.phone }}</a>
+              </td>
+              <td class="hidden text-[10px] font-semibold text-muted lg:table-cell">{{ formatDate(applicant.submittedAt) }}</td>
+              <td>
+                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.06em]" :class="statusClass(applicant.status)">
+                  <span class="h-1 w-1 rounded-full bg-current" />
+                  {{ statusLabel(applicant.status) }}
                 </span>
               </td>
-              <td class="px-4 py-3">
-                <div class="flex gap-1.5">
+              <td>
+                <div class="flex items-center justify-end gap-1">
                   <button
-                    @click="updateStatus(ap, 'accepted')"
-                    v-if="ap.status !== 'accepted'"
+                    v-if="applicant.status !== 'accepted'"
+                    type="button"
                     :disabled="store.isSaving"
-                    class="w-7 h-7 flex items-center justify-center rounded-lg text-green-600 hover:bg-green-100 transition-colors disabled:opacity-40"
-                    title="Terima"
+                    class="flex h-8 w-8 items-center justify-center rounded-lg text-moss transition-colors hover:bg-lime/20 disabled:opacity-40"
+                    title="Terima pendaftar"
+                    @click="updateStatus(applicant, 'accepted')"
                   >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                      <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </button>
+                  <a
+                    v-else-if="whatsappUrl(applicant)"
+                    :href="whatsappUrl(applicant)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex h-8 w-8 items-center justify-center rounded-lg bg-lime/15 text-moss transition-colors hover:bg-lime hover:text-white"
+                    title="Kirim WhatsApp penerimaan"
+                    aria-label="Kirim WhatsApp penerimaan"
+                  >
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12.04 2a9.9 9.9 0 00-8.5 15.02L2 22l5.1-1.5A9.9 9.9 0 1012.04 2zm0 18.1a8.2 8.2 0 01-4.18-1.14l-.3-.18-3.02.89.9-2.95-.2-.31A8.2 8.2 0 1112.04 20.1zm4.5-6.14c-.25-.13-1.47-.73-1.7-.81-.23-.09-.4-.13-.56.12-.17.25-.64.81-.78.98-.14.16-.29.18-.53.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05 0 1.2.88 2.37 1 2.53.12.17 1.73 2.64 4.2 3.7.59.25 1.04.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.23-.17-.48-.3z" />
+                    </svg>
+                  </a>
+                  <button
+                    v-if="applicant.status !== 'rejected'"
+                    type="button"
+                    :disabled="store.isSaving"
+                    class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                    title="Tolak pendaftar"
+                    @click="updateStatus(applicant, 'rejected')"
+                  >
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                      <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" />
                     </svg>
                   </button>
                   <button
-                    @click="updateStatus(ap, 'rejected')"
-                    v-if="ap.status !== 'rejected'"
-                    :disabled="store.isSaving"
-                    class="w-7 h-7 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-100 transition-colors disabled:opacity-40"
-                    title="Tolak"
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <button
-                    @click="detail = ap"
-                    class="w-7 h-7 flex items-center justify-center rounded-lg text-[#4D4D4D] hover:bg-[#009246]/10 hover:text-[#009246] transition-colors"
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-paper hover:text-ink"
                     title="Lihat detail"
+                    @click="detail = applicant"
                   >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke-linecap="round" stroke-linejoin="round" />
+                      <circle cx="12" cy="12" r="2.5" />
                     </svg>
                   </button>
                 </div>
-              </td>
-            </tr>
-            <tr v-if="store.filteredApplicants.length === 0">
-              <td colspan="5" class="py-10 text-center text-[#4D4D4D] text-sm">
-                {{ store.isLoading ? 'Memuat pendaftar...' : 'Tidak ada pendaftar ditemukan' }}
               </td>
             </tr>
           </tbody>
@@ -197,74 +371,205 @@ onMounted(() => {
     </div>
 
     <!-- Detail modal -->
-    <Transition name="fade">
-      <div v-if="detail" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" @click.self="detail = null">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl p-8 max-h-[90vh] overflow-y-auto">
-          <div class="flex items-start justify-between gap-4 mb-6">
-            <div>
-              <h2 class="text-xl font-extrabold text-[#111212]">{{ detail.fullName }}</h2>
-              <p class="text-sm text-[#4D4D4D] mt-0.5">{{ detail.nim }} · {{ detail.faculty }} — {{ detail.major }}</p>
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="detail"
+          class="fixed inset-0 z-[90] flex items-center justify-center bg-ink/80 p-3 backdrop-blur-sm sm:p-5"
+          role="dialog"
+          aria-modal="true"
+          @click.self="detail = null"
+        >
+          <div class="modal-viewport flex w-full max-w-2xl flex-col overflow-hidden rounded-[1.6rem] border border-line bg-paper shadow-2xl">
+            <div class="flex flex-shrink-0 items-start justify-between gap-4 border-b border-line bg-white px-5 py-4">
+              <div class="flex min-w-0 items-center gap-3">
+                <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-ink font-display text-sm font-bold text-lime-soft">
+                  {{ initials(detail.fullName) }}
+                </span>
+                <div class="min-w-0">
+                  <p class="text-[8px] font-black uppercase tracking-[0.16em] text-muted">Formulir pendaftar</p>
+                  <h2 class="mt-1 truncate font-display text-xl font-bold tracking-tight text-ink">{{ detail.fullName }}</h2>
+                  <p class="mt-0.5 truncate text-[9px] font-semibold text-muted">{{ detail.nim }} · {{ detail.faculty }} — {{ detail.major }}</p>
+                </div>
+              </div>
+              <button type="button" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-line text-muted transition-colors hover:border-ink hover:text-ink" aria-label="Tutup" @click="detail = null">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" />
+                </svg>
+              </button>
             </div>
-            <span class="text-xs font-bold px-2.5 py-0.5 rounded-full shrink-0" :class="statusClass(detail.status)">
-              {{ statusLabel(detail.status) }}
-            </span>
-          </div>
 
-          <dl class="grid sm:grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt class="text-xs font-bold text-[#4D4D4D] uppercase tracking-wider mb-0.5">Universitas</dt>
-              <dd class="text-[#111212]">{{ detail.university }}</dd>
-            </div>
-            <div>
-              <dt class="text-xs font-bold text-[#4D4D4D] uppercase tracking-wider mb-0.5">Tanggal Daftar</dt>
-              <dd class="text-[#111212]">{{ formatDate(detail.submittedAt) }}</dd>
-            </div>
-            <div>
-              <dt class="text-xs font-bold text-[#4D4D4D] uppercase tracking-wider mb-0.5">Email</dt>
-              <dd class="text-[#111212] break-all">{{ detail.email }}</dd>
-            </div>
-            <div>
-              <dt class="text-xs font-bold text-[#4D4D4D] uppercase tracking-wider mb-0.5">Telepon</dt>
-              <dd class="text-[#111212]">{{ detail.phone }}</dd>
-            </div>
-            <div class="sm:col-span-2">
-              <dt class="text-xs font-bold text-[#4D4D4D] uppercase tracking-wider mb-0.5">Alamat</dt>
-              <dd class="text-[#111212]">{{ detail.address }}</dd>
-            </div>
-            <div class="sm:col-span-2">
-              <dt class="text-xs font-bold text-[#4D4D4D] uppercase tracking-wider mb-0.5">Motivasi</dt>
-              <dd class="text-[#111212] whitespace-pre-line">{{ detail.motivation }}</dd>
-            </div>
-          </dl>
+            <div class="min-h-0 flex-1 overflow-y-auto p-5">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.06em]" :class="statusClass(detail.status)">
+                  <span class="h-1 w-1 rounded-full bg-current" />
+                  {{ statusLabel(detail.status) }}
+                </span>
+                <span class="rounded-full border border-line px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.06em] text-muted">
+                  Daftar {{ formatDate(detail.submittedAt) }}
+                </span>
+              </div>
 
-          <p v-if="store.error" class="mt-4 text-sm text-red-500">{{ store.error }}</p>
+              <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                <div class="rounded-[1rem] border border-line bg-white p-4">
+                  <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Universitas</p>
+                  <p class="mt-1.5 text-[11px] font-bold text-ink">{{ detail.university }}</p>
+                </div>
+                <div class="rounded-[1rem] border border-line bg-white p-4">
+                  <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Fakultas / jurusan</p>
+                  <p class="mt-1.5 text-[11px] font-bold text-ink">{{ detail.faculty }} — {{ detail.major }}</p>
+                </div>
+                <div class="rounded-[1rem] border border-line bg-white p-4">
+                  <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Email</p>
+                  <a :href="`mailto:${detail.email}`" class="mt-1.5 block break-all text-[11px] font-bold text-moss hover:underline">{{ detail.email }}</a>
+                </div>
+                <div class="rounded-[1rem] border border-line bg-white p-4">
+                  <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Telepon</p>
+                  <a :href="`tel:${detail.phone}`" class="mt-1.5 block text-[11px] font-bold text-moss hover:underline">{{ detail.phone }}</a>
+                </div>
+                <div class="rounded-[1rem] border border-line bg-white p-4 sm:col-span-2">
+                  <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Alamat</p>
+                  <p class="mt-1.5 text-[11px] font-semibold leading-relaxed text-ink/70">{{ detail.address }}</p>
+                </div>
+              </div>
 
-          <div class="flex gap-3 pt-6">
-            <button @click="detail = null" class="flex-1 py-2.5 border border-[#E6E6E6] text-[#4D4D4D] font-bold rounded-xl text-sm hover:border-[#009246] hover:text-[#009246] transition-colors">Tutup</button>
-            <button
-              v-if="detail.status !== 'accepted'"
-              @click="updateStatus(detail, 'accepted')"
-              :disabled="store.isSaving"
-              class="flex-1 py-2.5 bg-green-600 disabled:opacity-60 text-white font-bold rounded-xl text-sm hover:bg-green-700 transition-colors"
-            >
-              Terima
-            </button>
-            <button
-              v-if="detail.status !== 'rejected'"
-              @click="updateStatus(detail, 'rejected')"
-              :disabled="store.isSaving"
-              class="flex-1 py-2.5 bg-red-500 disabled:opacity-60 text-white font-bold rounded-xl text-sm hover:bg-red-600 transition-colors"
-            >
-              Tolak
-            </button>
+              <div class="mt-3 rounded-[1rem] bg-ink p-4 text-paper">
+                <div class="flex items-center gap-2">
+                  <span class="h-1 w-1 rounded-full bg-lime" />
+                  <p class="text-[8px] font-black uppercase tracking-[0.16em] text-lime-soft">Motivasi bergabung</p>
+                </div>
+                <p class="mt-2.5 whitespace-pre-line text-[11px] font-medium leading-relaxed text-white/65">{{ detail.motivation }}</p>
+              </div>
+
+              <p v-if="store.error" class="mt-3 rounded-[0.9rem] border border-red-200 bg-red-50 px-3 py-2.5 text-[11px] font-semibold text-red-600">{{ store.error }}</p>
+            </div>
+
+            <div class="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line bg-white px-5 py-4">
+              <button type="button" class="admin-btn admin-btn-ghost" @click="detail = null">Tutup</button>
+              <div class="flex items-center gap-2">
+                <a
+                  v-if="detail.status === 'accepted' && whatsappUrl(detail)"
+                  :href="whatsappUrl(detail)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="admin-btn admin-btn-lime"
+                >
+                  <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.04 2a9.9 9.9 0 00-8.5 15.02L2 22l5.1-1.5A9.9 9.9 0 1012.04 2zm0 18.1a8.2 8.2 0 01-4.18-1.14l-.3-.18-3.02.89.9-2.95-.2-.31A8.2 8.2 0 1112.04 20.1zm4.5-6.14c-.25-.13-1.47-.73-1.7-.81-.23-.09-.4-.13-.56.12-.17.25-.64.81-.78.98-.14.16-.29.18-.53.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05 0 1.2.88 2.37 1 2.53.12.17 1.73 2.64 4.2 3.7.59.25 1.04.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.23-.17-.48-.3z" />
+                  </svg>
+                  Kirim WhatsApp
+                </a>
+                <button
+                  v-if="detail.status !== 'rejected'"
+                  type="button"
+                  :disabled="store.isSaving"
+                  class="admin-btn border border-red-200 bg-white text-red-500 hover:bg-red-50 disabled:opacity-60"
+                  @click="updateStatus(detail, 'rejected')"
+                >
+                  Tolak
+                </button>
+                <button
+                  v-if="detail.status !== 'accepted'"
+                  type="button"
+                  :disabled="store.isSaving"
+                  class="admin-btn admin-btn-lime disabled:opacity-60"
+                  @click="updateStatus(detail, 'accepted')"
+                >
+                  {{ store.isSaving ? 'Menyimpan...' : 'Terima pendaftar' }}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </Teleport>
+
+    <!-- Dialog konfirmasi WhatsApp setelah pendaftar diterima -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="waPrompt"
+          class="fixed inset-0 z-[100] flex items-center justify-center bg-ink/80 p-3 backdrop-blur-sm sm:p-5"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="wa-acceptance-title"
+          @click.self="waPrompt = null"
+        >
+          <div class="modal-viewport w-full max-w-lg overflow-y-auto rounded-[1.6rem] border border-line bg-paper shadow-2xl">
+            <div class="flex items-start justify-between gap-4 border-b border-line bg-white px-5 py-4">
+              <div class="flex min-w-0 items-center gap-3">
+                <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-lime text-white">
+                  <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.04 2a9.9 9.9 0 00-8.5 15.02L2 22l5.1-1.5A9.9 9.9 0 1012.04 2zm0 18.1a8.2 8.2 0 01-4.18-1.14l-.3-.18-3.02.89.9-2.95-.2-.31A8.2 8.2 0 1112.04 20.1zm4.5-6.14c-.25-.13-1.47-.73-1.7-.81-.23-.09-.4-.13-.56.12-.17.25-.64.81-.78.98-.14.16-.29.18-.53.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.77-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05 0 1.2.88 2.37 1 2.53.12.17 1.73 2.64 4.2 3.7.59.25 1.04.4 1.4.52.59.19 1.13.16 1.55.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.11-.23-.17-.48-.3z" />
+                  </svg>
+                </span>
+                <div class="min-w-0">
+                  <p class="text-[8px] font-black uppercase tracking-[0.16em] text-moss">Pendaftar diterima</p>
+                  <h2 id="wa-acceptance-title" class="mt-1 truncate font-display text-lg font-bold tracking-tight text-ink">Kirim konfirmasi WhatsApp</h2>
+                </div>
+              </div>
+              <button type="button" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-line text-muted transition-colors hover:border-ink hover:text-ink" aria-label="Tutup" @click="waPrompt = null">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" />
+                </svg>
+              </button>
+            </div>
+
+            <div class="space-y-3 p-5">
+              <p class="text-[11px] font-semibold leading-relaxed text-muted">
+                Pesan penerimaan untuk <span class="font-extrabold text-ink">{{ waPrompt.applicant.fullName }}</span> sudah disiapkan. WhatsApp akan terbuka dengan pesan terisi; tekan kirim di aplikasi WhatsApp.
+              </p>
+              <div class="rounded-[1rem] border border-line bg-white p-4">
+                <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Pratinjau pesan</p>
+                <p class="mt-2 whitespace-pre-line text-[11px] font-medium leading-relaxed text-ink/70">{{ waPrompt.message }}</p>
+              </div>
+              <p class="rounded-[0.9rem] bg-paper px-3 py-2.5 text-[9px] font-semibold leading-relaxed text-muted">
+                Nomor tujuan: <span class="font-extrabold text-ink">{{ waPrompt.applicant.phone }}</span>
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-white px-5 py-4">
+              <button type="button" class="admin-btn admin-btn-ghost" @click="waPrompt = null">Nanti</button>
+              <button type="button" class="admin-btn admin-btn-lime" @click="openWhatsApp(waPrompt.applicant)">
+                Buka WhatsApp
+                <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M7 17L17 7M7 7h10v10" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 200ms ease;
+}
+.modal-enter-active > div,
+.modal-leave-active > div {
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from > div,
+.modal-leave-to > div {
+  transform: translateY(14px) scale(0.985);
+  opacity: 0;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 200ms ease, transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 10px);
+}
 </style>

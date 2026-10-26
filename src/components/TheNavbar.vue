@@ -1,17 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useSiteStore } from '@/stores/site'
-
-const route = useRoute()
-const router = useRouter()
-const siteStore = useSiteStore()
-const isMenuOpen = ref(false)
-const searchOpen = ref(false)
-const searchQuery = ref('')
-const openDropdown = ref<string | null>(null)
-const isScrolled = ref(false)
-const mobileOpenSection = ref<string | null>(null)
 
 interface NavSubItem {
   label: string
@@ -26,15 +16,27 @@ interface NavItem {
   children?: NavSubItem[]
 }
 
+const route = useRoute()
+const router = useRouter()
+const siteStore = useSiteStore()
+
+const isMenuOpen = ref(false)
+const searchOpen = ref(false)
+const searchQuery = ref('')
+const openDropdown = ref<string | null>(null)
+const isScrolled = ref(false)
+const mobileOpenSection = ref<string | null>(null)
+const searchInput = ref<HTMLInputElement | null>(null)
+
 const navItems: NavItem[] = [
   {
     label: 'Tentang',
     to: '/tentang',
     children: [
       { label: 'Sejarah HMI', to: '/tentang', hash: 'sejarah' },
-      { label: 'NDP HMI', to: '/tentang', hash: 'ndp' },
+      { label: 'Nilai Dasar Perjuangan', to: '/tentang', hash: 'ndp' },
       { label: 'Struktur Pengurus', to: '/tentang', hash: 'pengurus' },
-    ]
+    ],
   },
   { label: 'Berita', to: '/berita' },
   { label: 'Agenda', to: '/agenda' },
@@ -42,50 +44,66 @@ const navItems: NavItem[] = [
   { label: 'Kontak', to: '/kontak' },
 ]
 
-// CTA item (visually distinct in navbar)
+const quickSearches = ['LK 1', 'Kaderisasi', 'Bakti Sosial', 'Kajian NDP']
 const ctaItem = { label: 'Daftar LK 1', to: '/daftar' }
 
-// Check if a route is active
+const displayName = computed(() => siteStore.settings.organizationShortName || 'HMI')
+const chapterName = computed(() => siteStore.settings.chapterName || 'Insan Cita')
+const logoUrl = computed(() => siteStore.settings.logoUrl)
+
 function isActive(to: string, exact = false) {
   if (exact) return route.path === to
-  return route.path.startsWith(to)
-}
-
-
-function handleScroll() {
-  isScrolled.value = window.scrollY > 30
+  return route.path === to || route.path.startsWith(`${to}/`)
 }
 
 function closeAll() {
   isMenuOpen.value = false
   openDropdown.value = null
   searchOpen.value = false
-}
-
-function submitSearch() {
-  const query = searchQuery.value.trim()
-  closeAll()
-  void router.push({ name: 'news', query: query ? { q: query } : {} })
-}
-
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') closeAll()
-}
-
-watch(route, () => {
-  isMenuOpen.value = false
-  openDropdown.value = null
-  searchOpen.value = false
   mobileOpenSection.value = null
-})
+}
 
-// Close mobile menu on body click (outside)
-function handleBodyClick(e: MouseEvent) {
-  const header = document.querySelector('header')
-  if (header && !header.contains(e.target as Node)) {
+function handleScroll() {
+  isScrolled.value = window.scrollY > 24
+}
+
+async function openSearch() {
+  isMenuOpen.value = false
+  searchOpen.value = true
+  await nextTick()
+  searchInput.value?.focus()
+}
+
+function submitSearch(query = searchQuery.value) {
+  const value = query.trim()
+  closeAll()
+  void router.push({ name: 'news', query: value ? { q: value } : {} })
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    if (searchOpen.value) closeAll()
+    else void openSearch()
+    return
+  }
+
+  if (event.key === 'Escape') closeAll()
+}
+
+function handleBodyClick(event: MouseEvent) {
+  const header = document.querySelector('header[data-site-header]')
+  if (header && !header.contains(event.target as Node)) {
     isMenuOpen.value = false
+    openDropdown.value = null
   }
 }
+
+watch(route, closeAll)
+
+watch([isMenuOpen, searchOpen], ([menu, search]) => {
+  document.body.style.overflow = menu || search ? 'hidden' : ''
+})
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
@@ -98,314 +116,366 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('scroll', handleScroll)
   document.removeEventListener('click', handleBodyClick)
+  document.body.style.overflow = ''
 })
 </script>
 
 <template>
   <header
-    class="fixed top-0 left-0 right-0 z-50 transition-all duration-500"
-    :class="isScrolled
-      ? 'bg-[#0e0e0e]/96 backdrop-blur-xl shadow-[0_2px_30px_rgba(0,0,0,0.5)] border-b border-white/5'
-      : 'bg-[#111212]/90 backdrop-blur-sm'"
+    data-site-header
+    class="fixed inset-x-0 top-0 z-50 border-b backdrop-blur-xl transition-colors duration-300"
+    :class="isScrolled || isMenuOpen || searchOpen
+      ? 'border-white/20 bg-black'
+      : 'border-white/10 bg-black/95'"
   >
-    <!-- Green accent bar -->
-    <div class="h-[3px] w-full bg-gradient-to-r from-[#006837] via-[#009246] to-[#00A651]" />
-
-    <div class="max-w-[1200px] mx-auto px-4 sm:px-6">
-      <div class="flex items-center h-16 gap-6">
-
-        <!-- ───── Logo ───── -->
+    <div class="container-wide">
+      <div class="grid h-[var(--navbar-height)] grid-cols-[1fr_auto] items-center gap-4 lg:grid-cols-[1fr_auto_1fr]">
+        <!-- Brand -->
         <RouterLink
           to="/"
-          class="flex items-center gap-3 flex-shrink-0 group select-none cursor-pointer"
-          aria-label="HMI Komisariat Insan Cita - Beranda"
-          title="Beranda"
+          class="group flex flex-shrink-0 items-center justify-self-start gap-2.5"
+          aria-label="HMI Insan Cita — Beranda"
+          @click="closeAll"
         >
-          <div class="h-10 w-10 flex items-center justify-center flex-shrink-0">
+          <span class="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center overflow-hidden rounded-full bg-white ring-2 ring-[#155c17]/40 transition-transform duration-300 group-hover:rotate-6">
             <img
-              v-if="siteStore.settings.logoUrl"
-              :src="siteStore.settings.logoUrl"
-              :alt="`Logo ${siteStore.settings.organizationName || 'HMI'}`"
-              class="h-full w-full object-contain rounded-full ring-1 ring-white/15 drop-shadow-md group-hover:scale-105 transition-all duration-300"
+              v-if="logoUrl"
+              :src="logoUrl"
+              :alt="`Logo ${displayName}`"
+              class="h-full w-full object-contain"
             />
-            <span v-else class="w-full h-full rounded-full bg-[#009246]/20 border border-white/10 flex items-center justify-center text-[10px] font-black text-white">
-              HMI
-            </span>
-          </div>
-          <div
-            v-if="siteStore.settings.organizationShortName || siteStore.settings.chapterName"
-            class="hidden sm:flex flex-col leading-none gap-0.5"
-          >
-            <span class="text-white font-black text-[15px] tracking-wide group-hover:text-[#009246] transition-colors duration-300">{{ siteStore.settings.organizationShortName }}</span>
-            <span class="text-[#009246] text-[8px] font-black tracking-[0.22em] uppercase">{{ siteStore.settings.chapterName }}</span>
-          </div>
+            <span v-else class="text-[10px] font-black text-ink">HMI</span>
+          </span>
+          <span class="flex flex-col justify-center leading-none">
+            <span class="max-w-[7rem] truncate font-display text-[13px] font-extrabold tracking-tight text-white sm:max-w-[10rem] sm:text-[15px]">{{ displayName }}</span>
+            <span class="mt-1 max-w-[7rem] truncate text-[8px] font-extrabold uppercase tracking-[0.16em] text-lime-soft sm:max-w-[10rem]">{{ chapterName }}</span>
+          </span>
         </RouterLink>
 
-        <!-- ───── Desktop Nav ───── -->
-        <nav class="hidden lg:flex items-center gap-0.5 flex-1">
+        <!-- Desktop navigation -->
+        <nav class="hidden items-center justify-center gap-1 lg:flex" aria-label="Navigasi utama">
           <template v-for="item in navItems" :key="item.to">
-
-            <!-- Dropdown item -->
-            <div v-if="item.children"
+            <div
+              v-if="item.children"
               class="relative"
               @mouseenter="openDropdown = item.label"
               @mouseleave="openDropdown = null"
             >
               <button
-                class="relative flex items-center gap-1 px-3.5 py-2 text-[12.5px] font-bold uppercase tracking-wider rounded-md transition-all duration-200 outline-none"
-                :class="isActive(item.to) ? 'text-white bg-white/5' : 'text-white/65 hover:text-white hover:bg-white/5'"
+                type="button"
+                class="relative flex items-center gap-1.5 px-3 py-2 text-[10.5px] font-extrabold uppercase tracking-[0.12em] transition-colors"
+                :class="isActive(item.to) ? 'text-white' : 'text-white/55 hover:text-white'"
                 :aria-expanded="openDropdown === item.label"
                 aria-haspopup="true"
+                @click="openDropdown = openDropdown === item.label ? null : item.label"
               >
+                <span v-if="isActive(item.to)" class="h-1 w-1 rounded-full bg-lime-soft" />
                 {{ item.label }}
                 <svg
-                  class="w-2.5 h-2.5 ml-0.5 transition-transform duration-300 opacity-70"
-                  :class="openDropdown === item.label ? 'rotate-180 !opacity-100 text-[#009246]' : ''"
-                  viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg"
+                  class="h-2.5 w-2.5 transition-transform duration-300"
+                  :class="openDropdown === item.label ? 'rotate-180 text-lime-soft' : 'text-white/60'"
+                  viewBox="0 0 10 6"
+                  fill="none"
+                  aria-hidden="true"
                 >
-                  <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                <!-- Active indicator -->
-                <span v-if="isActive(item.to)"
-                  class="absolute bottom-0 left-2 right-2 h-[2px] rounded-t-full bg-[#009246] shadow-[0_0_8px_rgba(0,146,70,0.8)]"
-                />
               </button>
 
-              <!-- Dropdown panel -->
-              <Transition name="dropdown">
-                <div v-if="openDropdown === item.label"
+              <Transition name="drop">
+                <div
+                  v-if="openDropdown === item.label"
+                  class="absolute left-0 top-[calc(100%+14px)] w-64 overflow-hidden rounded-2xl border border-line bg-paper p-2 text-ink shadow-2xl"
                   role="menu"
-                  class="absolute top-[calc(100%+6px)] left-0 w-52 bg-[#181818]/96 backdrop-blur-2xl border border-white/8 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.7)] overflow-hidden py-1.5 z-50"
                 >
-                  <div class="px-4 pt-1.5 pb-1 text-[9px] font-black text-white/25 uppercase tracking-[0.25em] border-b border-white/5 mb-1">
-                    {{ item.label }}
+                  <div class="flex items-center justify-between px-3 pb-2 pt-1.5">
+                    <span class="text-[8px] font-black uppercase tracking-[0.22em] text-muted">{{ item.label }}</span>
+                    <span class="h-1.5 w-1.5 rounded-full bg-moss" />
                   </div>
-                  <a
+                  <RouterLink
                     v-for="child in item.children"
                     :key="child.hash"
-                    :href="`${child.to}${child.hash ? '#' + child.hash : ''}`"
+                    :to="{ path: child.to, hash: child.hash }"
+                    class="group flex items-center justify-between rounded-xl px-3 py-2.5 text-[11px] font-bold text-ink/65 transition-colors hover:bg-ink hover:text-lime-soft"
                     role="menuitem"
-                    class="flex items-center gap-2.5 px-4 py-2.5 text-[12.5px] font-semibold text-white/65 hover:text-white hover:bg-white/6 transition-all duration-150 group/item"
                     @click="openDropdown = null"
                   >
-                    <span class="w-1 h-1 rounded-full bg-[#009246] flex-shrink-0 opacity-50 group-hover/item:opacity-100 transition-opacity" />
                     {{ child.label }}
-                  </a>
+                    <svg class="h-3 w-3 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </RouterLink>
                 </div>
               </Transition>
             </div>
 
-            <!-- Normal item -->
-            <RouterLink v-else :to="item.to"
-              class="relative px-3.5 py-2 text-[12.5px] font-bold uppercase tracking-wider rounded-md transition-all duration-200"
-              :class="isActive(item.to, item.exact) ? 'text-white bg-white/5' : 'text-white/65 hover:text-white hover:bg-white/5'"
+            <RouterLink
+              v-else
+              :to="item.to"
+              class="relative flex items-center gap-1.5 px-3 py-2 text-[10.5px] font-extrabold uppercase tracking-[0.12em] transition-colors"
+              :class="isActive(item.to, item.exact) ? 'text-white' : 'text-white/55 hover:text-white'"
             >
+              <span v-if="isActive(item.to, item.exact)" class="h-1 w-1 rounded-full bg-lime-soft" />
               {{ item.label }}
-              <span v-if="isActive(item.to, item.exact)"
-                class="absolute bottom-0 left-2 right-2 h-[2px] rounded-t-full bg-[#009246] shadow-[0_0_8px_rgba(0,146,70,0.8)]"
-              />
             </RouterLink>
           </template>
         </nav>
 
-        <!-- ───── Right Actions ───── -->
-        <div class="flex items-center gap-2.5 ml-auto lg:ml-0">
-
-          <!-- Search button -->
+        <!-- Actions -->
+        <div class="flex items-center justify-self-end gap-1.5 sm:gap-2">
           <button
-            @click="searchOpen = !searchOpen; isMenuOpen = false"
-            class="hidden sm:flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 border"
-            :class="searchOpen ? 'bg-[#009246]/20 border-[#009246]/50 text-[#009246]' : 'bg-white/5 border-white/8 text-white/60 hover:bg-white/10 hover:text-white hover:border-white/20'"
-            aria-label="Cari"
+            type="button"
+            class="hidden h-9 w-9 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/5 hover:text-lime-soft sm:flex"
+            aria-label="Buka pencarian"
             title="Cari (Ctrl+K)"
+            @click="openSearch"
           >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M11 11L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <svg class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+              <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6" />
+              <path d="M11 11L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
             </svg>
           </button>
 
-          <!-- CTA — Daftar LK 1 -->
-          <RouterLink :to="ctaItem.to"
-            class="hidden md:flex items-center px-4 py-1.5 bg-[#009246] hover:bg-[#00A651] text-white text-[11.5px] font-black uppercase tracking-widest rounded-full transition-all duration-300 shadow-[0_2px_14px_rgba(0,146,70,0.35)] hover:shadow-[0_4px_20px_rgba(0,146,70,0.55)] hover:-translate-y-px active:translate-y-0"
+          <RouterLink
+            :to="ctaItem.to"
+            class="hidden items-center gap-1.5 rounded-md bg-lime px-4 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.1em] text-white transition-colors hover:bg-lime-bright md:flex"
+            @click="closeAll"
           >
             Daftar LK 1
+            <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
           </RouterLink>
 
-          <!-- Admin link (subtle) -->
-          <RouterLink to="/login"
-            class="hidden lg:flex items-center px-3 py-1.5 text-[11px] font-bold text-white/40 hover:text-white/80 uppercase tracking-widest border border-white/8 hover:border-white/20 rounded-full transition-all duration-200"
+          <RouterLink
+            to="/login"
+            class="hidden h-9 items-center px-2 text-[9px] font-extrabold uppercase tracking-[0.14em] text-white/60 transition-colors hover:text-white lg:flex"
+            @click="closeAll"
           >
             Admin
           </RouterLink>
 
-          <!-- Mobile toggle -->
           <button
-            @click="isMenuOpen = !isMenuOpen; searchOpen = false"
-            class="lg:hidden flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-200 border"
-            :class="isMenuOpen ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/8'"
-            :aria-label="isMenuOpen ? 'Tutup Menu' : 'Buka Menu'"
+            type="button"
+            class="flex h-9 w-9 items-center justify-center rounded-md text-white transition-colors hover:bg-white/5 hover:text-lime-soft lg:hidden"
+            :aria-label="isMenuOpen ? 'Tutup menu' : 'Buka menu'"
             :aria-expanded="isMenuOpen"
+            @click="isMenuOpen = !isMenuOpen; searchOpen = false"
           >
-            <div class="relative w-4 h-3.5 flex flex-col justify-between">
-              <span class="block w-full h-0.5 bg-white rounded-full transition-all duration-300 origin-center"
-                :class="isMenuOpen ? 'rotate-45 translate-y-[6px]' : ''" />
-              <span class="block w-3/4 h-0.5 bg-white rounded-full transition-all duration-300"
-                :class="isMenuOpen ? 'opacity-0 -translate-x-2' : ''" />
-              <span class="block w-full h-0.5 bg-white rounded-full transition-all duration-300 origin-center"
-                :class="isMenuOpen ? '-rotate-45 -translate-y-[7px]' : ''" />
-            </div>
+            <span class="relative flex h-3.5 w-4 flex-col justify-between">
+              <span class="block h-[1.5px] w-full rounded-full bg-current transition-all duration-300" :class="isMenuOpen ? 'translate-y-[6px] rotate-45' : ''" />
+              <span class="block h-[1.5px] w-3/4 rounded-full bg-current transition-all duration-300" :class="isMenuOpen ? 'translate-x-1 opacity-0' : ''" />
+              <span class="block h-[1.5px] w-full rounded-full bg-current transition-all duration-300" :class="isMenuOpen ? '-translate-y-[6px] -rotate-45' : ''" />
+            </span>
           </button>
         </div>
       </div>
-
-      <!-- ───── Search Bar ───── -->
-      <Transition name="search-expand">
-        <div v-if="searchOpen" class="pb-3">
-          <div class="relative">
-            <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" viewBox="0 0 16 16" fill="none">
-              <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M11 11L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            <input
-              v-model="searchQuery"
-              type="text"
-              id="navbar-search"
-              placeholder="Cari berita, kegiatan, atau program..."
-              autofocus
-              class="w-full bg-white/6 border border-[#009246]/30 text-white placeholder-white/30 rounded-xl pl-11 pr-20 py-2.5 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-[#009246]/50 focus:border-[#009246]/60 transition-all"
-              @keyup.enter="submitSearch"
-            />
-            <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-              <kbd class="text-[10px] font-bold text-white/30 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 tracking-wider">ESC</kbd>
-              <button @click="searchOpen = false" class="text-white/40 hover:text-white transition-colors" title="Tutup">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
     </div>
 
-    <!-- ───── Mobile Menu ───── -->
-    <Transition name="mobile-slide">
-      <div v-if="isMenuOpen"
-        class="lg:hidden absolute top-full left-0 right-0 bg-[#0e0e0e]/98 backdrop-blur-2xl border-t border-white/8 shadow-[0_20px_60px_rgba(0,0,0,0.7)]"
-        style="max-height: calc(100vh - 67px); overflow-y: auto;"
-      >
-        <div class="px-4 pt-4 pb-6 space-y-2">
-
-          <!-- Mobile search -->
-          <div class="relative mb-3">
-            <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" viewBox="0 0 16 16" fill="none">
-              <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M11 11L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Cari..."
-              class="w-full bg-white/5 border border-white/8 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-[#009246]/50 transition-all"
-              @keyup.enter="submitSearch"
-            />
+    <!-- Search overlay -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div
+          v-if="searchOpen"
+          class="fixed inset-0 z-[60] bg-ink/97 text-paper backdrop-blur-2xl"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Pencarian situs"
+          @click.stop
+          @click.self="searchOpen = false"
+        >
+        <div class="container-wide screen-min flex flex-col justify-center pt-[calc(var(--nav-offset)+clamp(1rem,3svh,2rem))] pb-[clamp(2rem,6svh,4rem)]">
+          <div class="flex items-center justify-between">
+            <span class="eyebrow eyebrow-lime">Pencarian</span>
+            <button
+              type="button"
+              class="flex h-10 w-10 items-center justify-center rounded-full border border-white/15 text-white/60 transition-colors hover:border-lime-soft hover:text-lime-soft"
+              aria-label="Tutup pencarian"
+              @click="searchOpen = false"
+            >
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" />
+              </svg>
+            </button>
           </div>
 
-          <!-- Nav links -->
-          <template v-for="item in navItems" :key="item.to">
-
-            <!-- Dropdown section -->
-            <div v-if="item.children" class="overflow-hidden rounded-xl border border-white/8">
-              <button
-                @click="mobileOpenSection = mobileOpenSection === item.label ? null : item.label"
-                class="w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold uppercase tracking-wide transition-colors"
-                :class="mobileOpenSection === item.label ? 'bg-white/8 text-white' : 'bg-white/4 text-white/70'"
-              >
-                {{ item.label }}
-                <svg class="w-3.5 h-3.5 transition-transform duration-300 opacity-60"
-                  :class="mobileOpenSection === item.label ? 'rotate-180' : ''"
-                  viewBox="0 0 10 6" fill="none">
-                  <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <form class="mt-8 border-b border-white/15 pb-5" @submit.prevent="submitSearch()">
+            <div class="flex items-center gap-4">
+              <span class="hidden h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-lime text-white sm:flex">
+                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="10.5" cy="10.5" r="7" />
+                  <path d="M16 16l5 5" stroke-linecap="round" />
+                </svg>
+              </span>
+              <input
+                ref="searchInput"
+                v-model="searchQuery"
+                type="search"
+                placeholder="Cari berita, agenda, atau kegiatan..."
+                class="min-w-0 flex-1 bg-transparent font-display text-2xl font-semibold tracking-tight text-white placeholder:text-white/60 focus:outline-none sm:text-5xl"
+                aria-label="Kata kunci pencarian"
+              />
+              <button type="submit" class="btn btn-lime hidden sm:inline-flex">
+                Cari
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </button>
-              <Transition name="accordion">
-                <div v-if="mobileOpenSection === item.label" class="bg-white/3 border-t border-white/5">
-                  <a
-                    v-for="child in item.children"
-                    :key="child.hash"
-                    :href="`${child.to}${child.hash ? '#' + child.hash : ''}`"
-                    class="flex items-center gap-3 px-5 py-3 text-sm font-semibold text-white/65 hover:text-white hover:bg-white/5 transition-all"
-                    @click="isMenuOpen = false"
-                  >
-                    <span class="w-1 h-1 rounded-full bg-[#009246]" />
-                    {{ child.label }}
-                  </a>
-                </div>
-              </Transition>
             </div>
+          </form>
 
-            <!-- Normal link -->
-            <RouterLink v-else :to="item.to"
-              class="flex items-center px-4 py-3.5 text-sm font-bold uppercase tracking-wide rounded-xl border transition-all"
-              :class="isActive(item.to, item.exact)
-                ? 'text-[#009246] bg-[#009246]/10 border-[#009246]/25'
-                : 'text-white/70 bg-white/4 border-white/8 hover:text-white hover:bg-white/8'"
-              @click="isMenuOpen = false"
-            >
-              {{ item.label }}
-            </RouterLink>
-          </template>
-
-          <!-- CTA -->
-          <RouterLink :to="ctaItem.to"
-            class="flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-[#006837] to-[#009246] text-white text-sm font-black uppercase tracking-widest rounded-xl shadow-[0_4px_20px_rgba(0,146,70,0.35)] hover:from-[#007a3d] hover:to-[#00a651] transition-all mt-2"
-            @click="isMenuOpen = false"
-          >
-            Daftar LK 1
-          </RouterLink>
-
-          <!-- Admin -->
-          <RouterLink to="/login"
-            class="flex items-center justify-center py-3 text-sm font-bold text-white/40 hover:text-white/70 border border-white/8 rounded-xl transition-colors tracking-wider"
-            @click="isMenuOpen = false"
-          >
-            Masuk Admin
-          </RouterLink>
+          <div class="mt-10 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="mr-1 text-[9px] font-black uppercase tracking-[0.18em] text-white/60">Coba</span>
+              <button
+                v-for="term in quickSearches"
+                :key="term"
+                type="button"
+                class="chip chip-dark"
+                @click="searchQuery = term; submitSearch(term)"
+              >
+                {{ term }}
+              </button>
+            </div>
+            <span class="text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">
+              ESC untuk menutup · Ctrl K untuk membuka
+            </span>
+          </div>
         </div>
       </div>
-    </Transition>
+      </Transition>
+    </Teleport>
+
+    <!-- Mobile menu -->
+    <Teleport to="body">
+      <Transition name="menu">
+        <div
+          v-if="isMenuOpen"
+          class="fixed inset-0 z-[60] overflow-y-auto bg-ink text-paper lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu navigasi seluler"
+          @click.stop
+          @click.self="isMenuOpen = false"
+        >
+        <div class="container-wide pb-12 pt-[calc(var(--nav-offset)+clamp(1.25rem,4svh,2.5rem))]">
+          <div class="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+            <span class="eyebrow eyebrow-lime">Menu</span>
+            <div class="flex items-center gap-3">
+              <span class="hidden text-[9px] font-black uppercase tracking-[0.2em] text-white/60 sm:inline">{{ chapterName }}</span>
+              <button
+                type="button"
+                class="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 text-white transition-colors hover:border-lime-soft hover:text-lime-soft"
+                aria-label="Tutup menu"
+                @click="isMenuOpen = false"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <nav class="mt-7 flex flex-col" aria-label="Navigasi seluler">
+            <div v-for="(item, index) in navItems" :key="item.to" class="border-b border-white/10">
+              <div v-if="item.children">
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-between py-5 text-left"
+                  :aria-expanded="mobileOpenSection === item.label"
+                  @click="mobileOpenSection = mobileOpenSection === item.label ? null : item.label"
+                >
+                  <span class="flex items-baseline gap-4">
+                    <span class="text-[9px] font-black text-lime-soft/60">{{ String(index + 1).padStart(2, '0') }}</span>
+                    <span class="font-display text-[2rem] font-semibold tracking-tight">{{ item.label }}</span>
+                  </span>
+                  <svg class="h-4 w-4 text-lime-soft transition-transform" :class="mobileOpenSection === item.label ? 'rotate-45' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+                  </svg>
+                </button>
+                <div v-if="mobileOpenSection === item.label" class="pb-4 pl-9">
+                  <RouterLink
+                    v-for="child in item.children"
+                    :key="child.hash"
+                    :to="{ path: child.to, hash: child.hash }"
+                    class="flex items-center justify-between border-t border-white/10 py-3 text-sm font-semibold text-white/55"
+                    @click="closeAll"
+                  >
+                    {{ child.label }}
+                    <span class="text-lime-soft">↗</span>
+                  </RouterLink>
+                </div>
+              </div>
+              <RouterLink
+                v-else
+                :to="item.to"
+                class="flex items-baseline gap-4 py-5"
+                @click="closeAll"
+              >
+                <span class="text-[9px] font-black text-lime-soft/60">{{ String(index + 1).padStart(2, '0') }}</span>
+                <span
+                  class="font-display text-[2rem] font-semibold tracking-tight transition-colors"
+                  :class="isActive(item.to) ? 'text-lime-soft' : 'text-white'"
+                >
+                  {{ item.label }}
+                </span>
+              </RouterLink>
+            </div>
+          </nav>
+
+          <div class="mt-8 grid gap-3 sm:grid-cols-2">
+            <RouterLink :to="ctaItem.to" class="btn btn-lime w-full" @click="closeAll">
+              Daftar LK 1
+            </RouterLink>
+            <RouterLink to="/login" class="btn btn-outline-light w-full" @click="closeAll">
+              Masuk Admin
+            </RouterLink>
+          </div>
+
+          <div class="mt-10 flex items-center justify-between border-t border-white/10 pt-5">
+            <button type="button" class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/60" @click="openSearch">
+              <svg class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+                <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6" />
+                <path d="M11 11L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              </svg>
+              Cari di situs
+            </button>
+            <span class="text-[9px] font-black uppercase tracking-[0.18em] text-white/60">Yakin Usaha Sampai</span>
+          </div>
+        </div>
+      </div>
+      </Transition>
+    </Teleport>
   </header>
 </template>
 
 <style scoped>
-/* Dropdown */
-.dropdown-enter-active { transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
-.dropdown-leave-active { transition: all 0.15s ease-in; }
-.dropdown-enter-from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-.dropdown-leave-to   { opacity: 0; transform: translateY(-4px) scale(0.98); }
+.drop-enter-active,
+.drop-leave-active {
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.drop-enter-from,
+.drop-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.98);
+}
 
-/* Search bar */
-.search-expand-enter-active { transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
-.search-expand-leave-active { transition: all 0.2s ease-in; }
-.search-expand-enter-from, .search-expand-leave-to { opacity: 0; max-height: 0; transform: translateY(-6px); }
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 260ms ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 
-/* Mobile slide */
-.mobile-slide-enter-active { transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
-.mobile-slide-leave-active { transition: all 0.25s ease-in; }
-.mobile-slide-enter-from { opacity: 0; transform: translateY(-12px); }
-.mobile-slide-leave-to   { opacity: 0; transform: translateY(-8px); }
-
-/* Accordion */
-.accordion-enter-active, .accordion-leave-active { transition: all 0.25s ease; overflow: hidden; }
-.accordion-enter-from, .accordion-leave-to { max-height: 0; opacity: 0; }
-.accordion-enter-to, .accordion-leave-from { max-height: 200px; opacity: 1; }
-
-/* White opacity variants */
-.bg-white\/4 { background: rgba(255,255,255,0.04); }
-.bg-white\/6 { background: rgba(255,255,255,0.06); }
-.bg-white\/8 { background: rgba(255,255,255,0.08); }
-.hover\:bg-white\/6:hover { background: rgba(255,255,255,0.06); }
-.hover\:bg-white\/8:hover { background: rgba(255,255,255,0.08); }
-.border-white\/8 { border-color: rgba(255,255,255,0.08); }
+.menu-enter-active,
+.menu-leave-active {
+  transition: opacity 280ms ease, transform 380ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.menu-enter-from,
+.menu-leave-to {
+  opacity: 0;
+  transform: translateY(-18px);
+}
 </style>

@@ -29,7 +29,11 @@ export const useApplicantStore = defineStore('applicants', () => {
     if (query) {
       result = result.filter(
         (applicant) =>
-          applicant.fullName.toLowerCase().includes(query) || applicant.nim.includes(query),
+          applicant.fullName.toLowerCase().includes(query) ||
+          applicant.nim.includes(query) ||
+          applicant.university.toLowerCase().includes(query) ||
+          applicant.faculty.toLowerCase().includes(query) ||
+          applicant.email.toLowerCase().includes(query),
       )
     }
     return result

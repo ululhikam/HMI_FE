@@ -45,6 +45,12 @@ const router = createRouter({
           meta: { title: 'Agenda | HMI Insan Cita' },
         },
         {
+          path: 'agenda/:id',
+          name: 'agenda-detail',
+          component: () => import('@/views/AgendaDetailView.vue'),
+          meta: { title: 'Detail Agenda | HMI Insan Cita' },
+        },
+        {
           path: 'galeri',
           name: 'gallery',
           component: () => import('@/views/GalleryView.vue'),

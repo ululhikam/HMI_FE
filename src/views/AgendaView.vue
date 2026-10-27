@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useEventStore } from '@/stores/events'
 import { useArticleStore } from '@/stores/articles'
@@ -38,15 +38,6 @@ function statusLabel(status: Event['status']) {
   return 'Selesai'
 }
 
-const summaryStats = computed(() => {
-  const summary = store.summary
-  return [
-    { label: 'Peserta', value: summary ? `${summary.participants}+` : '—' },
-    { label: 'Sesi kaji', value: summary ? `${summary.sessions}+` : '—' },
-    { label: 'Alumni', value: summary ? `${summary.alumni}+` : '—' },
-  ]
-})
-
 const countdown = ref({ days: 0, hours: 0, minutes: 0, seconds: 0 })
 let timerInterval: ReturnType<typeof setInterval> | null = null
 
@@ -84,52 +75,8 @@ const filteredAgendaList = computed(() => {
   return list
 })
 
-const selectedModalEvent = ref<Event | null>(null)
-const isRegisteredSuccess = ref(false)
-const showToast = ref(false)
-const toastMsg = ref('')
-
-const regName = ref('')
-const regEmail = ref('')
-const regPhone = ref('')
-
 const newsletterEmail = ref('')
 const newsletterSubscribed = ref(false)
-
-function openModal(event: Event) {
-  selectedModalEvent.value = event
-  isRegisteredSuccess.value = false
-  regName.value = ''
-  regEmail.value = ''
-  regPhone.value = ''
-}
-
-const externalRegistrationUrl = computed(() => {
-  const url = selectedModalEvent.value?.registrationUrl?.trim()
-  return url || ''
-})
-
-function closeModal() {
-  selectedModalEvent.value = null
-}
-
-async function handleRegisterSubmit() {
-  if (!selectedModalEvent.value || !regName.value || !regEmail.value) return
-  const registration = await store.registerForEvent(selectedModalEvent.value.id, {
-    name: regName.value,
-    email: regEmail.value,
-    phone: regPhone.value || undefined,
-  })
-  if (!registration) return
-
-  isRegisteredSuccess.value = true
-  toastMsg.value = 'Pendaftaran agenda berhasil dicatat.'
-  showToast.value = true
-  setTimeout(() => (showToast.value = false), 3500)
-  regName.value = ''
-  regEmail.value = ''
-  regPhone.value = ''
-}
 
 async function subscribeAgenda() {
   newsletterSubscribed.value = false
@@ -156,47 +103,21 @@ function formatEventRange(event: Event | null) {
   return `${start} – ${formatDateBadge(event.endDate).fullDate}`
 }
 
-function handleKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') closeModal()
-}
-
-watch(selectedModalEvent, (event) => {
-  document.body.style.overflow = event ? 'hidden' : ''
-})
-
 onMounted(() => {
   void store.fetchAll()
   void articleStore.fetchPublished()
   void siteStore.fetchSettings()
   updateCountdown()
   timerInterval = setInterval(updateCountdown, 1000)
-  window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval)
-  window.removeEventListener('keydown', handleKeydown)
-  document.body.style.overflow = ''
 })
 </script>
 
 <template>
   <div class="bg-paper text-ink">
-    <!-- Toast -->
-    <Transition name="toast">
-      <div
-        v-if="showToast"
-        class="fixed bottom-5 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-5 py-3 text-xs font-bold text-white shadow-2xl"
-      >
-        <span class="flex h-5 w-5 items-center justify-center rounded-full bg-lime text-white">
-          <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-            <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </span>
-        {{ toastMsg }}
-      </div>
-    </Transition>
-
     <!-- Hero -->
     <section class="hero-compact relative overflow-hidden bg-ink text-paper">
       <div class="pointer-events-none absolute inset-0 bg-grid-dark opacity-60" />
@@ -204,7 +125,7 @@ onUnmounted(() => {
 
       <div class="container-wide relative z-10">
         <div class="flex flex-wrap items-center justify-between gap-4">
-          <span class="eyebrow eyebrow-lime">Agenda HMI</span>
+          <span class="eyebrow eyebrow-lime">Agenda unggulan</span>
           <RouterLink to="/daftar" class="btn btn-lime inline-flex">
             Daftar LK 1
             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -248,17 +169,16 @@ onUnmounted(() => {
             </div>
 
             <div class="mt-5 flex flex-wrap gap-2.5 sm:mt-8">
-              <button
+              <RouterLink
                 v-if="featuredEvent"
-                type="button"
+                :to="`/agenda/${featuredEvent.id}`"
                 class="btn btn-lime"
-                @click="openModal(featuredEvent)"
               >
-                Detail & daftar agenda
+                Lihat detail agenda
                 <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-              </button>
+              </RouterLink>
               <a href="#agenda-list-section" class="btn btn-outline-light">Lihat semua agenda</a>
             </div>
           </div>
@@ -310,87 +230,6 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <!-- Event info strip -->
-    <section class="bg-paper">
-      <div class="container-wide">
-        <div class="grid overflow-hidden rounded-b-[1.5rem] border-x border-b border-line bg-white sm:grid-cols-3">
-          <div class="flex items-center gap-3 border-b border-line p-4 sm:border-b-0 sm:border-r sm:p-5">
-            <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-paper text-moss">
-              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </span>
-            <div>
-              <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Penyelenggara</p>
-              <p class="mt-1 text-xs font-bold text-ink">{{ siteStore.settings.organizationName || 'HMI Insan Cita' }}</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-3 border-b border-line p-4 sm:border-b-0 sm:border-r sm:p-5">
-            <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-paper text-moss">
-              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <rect x="3" y="5" width="18" height="16" rx="2" />
-                <path d="M8 3v4M16 3v4M3 10h18" stroke-linecap="round" />
-              </svg>
-            </span>
-            <div>
-              <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Tanggal</p>
-              <p class="mt-1 text-xs font-bold text-ink">{{ formatEventRange(featuredEvent) }}</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-3 p-4 sm:p-5">
-            <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-paper text-moss">
-              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M12 21s7-5.1 7-11a7 7 0 10-14 0c0 5.9 7 11 7 11z" stroke-linecap="round" stroke-linejoin="round" />
-                <circle cx="12" cy="10" r="2.5" />
-              </svg>
-            </span>
-            <div>
-              <p class="text-[8px] font-black uppercase tracking-[0.14em] text-muted">Lokasi</p>
-              <p class="mt-1 text-xs font-bold text-ink">{{ eventLocation }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- About event + stats -->
-    <section class="section-pad bg-paper-deep">
-      <div class="container-wide">
-        <div class="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-          <div v-reveal>
-            <span class="eyebrow">Tentang kegiatan</span>
-            <h2 class="display-md mt-5">{{ featuredEvent?.title || 'Agenda HMI Insan Cita' }}</h2>
-            <p class="mt-5 max-w-xl text-sm font-medium leading-relaxed text-muted sm:text-base">
-              {{ featuredEvent?.description || 'Deskripsi agenda belum tersedia. Silakan lihat daftar agenda untuk informasi kegiatan terbaru.' }}
-            </p>
-            <div class="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <div v-for="stat in summaryStats" :key="stat.label" class="rounded-[1.2rem] border border-line bg-white p-4">
-                <p class="font-display text-2xl font-bold leading-none text-moss">{{ stat.value }}</p>
-                <p class="mt-2 text-[8px] font-black uppercase tracking-[0.14em] text-muted">{{ stat.label }}</p>
-              </div>
-            </div>
-          </div>
-
-          <div v-reveal="{ delay: 100 }" class="relative overflow-hidden rounded-[2rem] border border-line bg-ink p-7 text-paper sm:p-9">
-            <div class="absolute inset-0 bg-grid-dark opacity-60" />
-            <div class="relative">
-              <StarMark :size="40" class="text-lime-soft" />
-              <p class="mt-8 font-display text-2xl font-semibold leading-tight tracking-tight text-white sm:text-3xl">
-                “Yakin Usaha Sampai”
-              </p>
-              <p class="mt-4 max-w-sm text-sm font-medium leading-relaxed text-white/60">
-                Setiap agenda adalah ruang belajar, berjejaring, dan mengasah kepemimpinan kader.
-              </p>
-              <div class="mt-8 flex items-center justify-between border-t border-white/10 pt-5">
-                <span class="text-[8px] font-black uppercase tracking-[0.16em] text-white/60">HMI Komisariat Insan Cita</span>
-                <span class="h-2 w-2 rounded-full bg-lime-soft" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <!-- Agenda list -->
     <section id="agenda-list-section" class="section-pad bg-paper-deep">
       <div class="container-wide">
@@ -434,6 +273,15 @@ onUnmounted(() => {
               </div>
               <h3 class="mt-2 font-display text-lg font-semibold leading-snug tracking-tight text-ink transition-colors group-hover:text-moss">{{ event.title }}</h3>
               <p class="mt-1.5 line-clamp-2 text-xs font-medium leading-relaxed text-muted">{{ event.description }}</p>
+              <p
+                v-if="event.speaker || event.speakerRole"
+                class="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[9px] font-semibold text-muted"
+              >
+                <span class="font-black uppercase tracking-[0.1em] text-moss">Pemateri</span>
+                <span v-if="event.speaker" class="text-ink">{{ event.speaker }}</span>
+                <span v-if="event.speaker && event.speakerRole" class="text-muted/60">·</span>
+                <span v-if="event.speakerRole">{{ event.speakerRole }}</span>
+              </p>
               <p class="mt-2 flex items-center gap-1.5 text-[9px] font-bold text-muted">
                 <svg class="h-3 w-3 text-moss" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                   <path d="M12 21s7-5.1 7-11a7 7 0 10-14 0c0 5.9 7 11 7 11z" stroke-linecap="round" stroke-linejoin="round" />
@@ -444,29 +292,22 @@ onUnmounted(() => {
             </div>
 
             <div class="flex items-center gap-2">
-              <button type="button" class="admin-btn admin-btn-ghost flex-1 md:flex-none" @click="openModal(event)">
-                Detail
-              </button>
-              <a
-                v-if="event.registrationUrl && event.status !== 'done'"
-                :href="event.registrationUrl"
-                target="_blank"
-                rel="noopener noreferrer"
+              <RouterLink
+                :to="`/agenda/${event.id}`"
+                class="admin-btn admin-btn-ghost flex-1 md:flex-none"
+              >
+                Detail agenda
+              </RouterLink>
+              <RouterLink
+                v-if="event.status !== 'done'"
+                :to="{ name: 'agenda-detail', params: { id: event.id }, query: { daftar: '1' } }"
                 class="btn btn-ink min-h-[clamp(2.45rem,4.8svh,2.8rem)] flex-1 px-4 text-[9px] md:flex-none"
               >
                 Daftar agenda
                 <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <path d="M7 17L17 7M7 7h10v10" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-              </a>
-              <button
-                v-else-if="event.status !== 'done'"
-                type="button"
-                class="btn btn-ink min-h-[clamp(2.45rem,4.8svh,2.8rem)] flex-1 px-4 text-[9px] md:flex-none"
-                @click="openModal(event)"
-              >
-                Daftar agenda
-              </button>
+              </RouterLink>
             </div>
           </article>
         </div>
@@ -583,106 +424,5 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <!-- Modal -->
-    <Teleport to="body">
-      <Transition name="modal">
-        <div
-          v-if="selectedModalEvent"
-          class="fixed inset-0 z-[80] flex items-center justify-center bg-ink/80 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          @click.self="closeModal"
-        >
-          <div class="modal-viewport w-full max-w-lg overflow-y-auto rounded-[1.75rem] border border-line bg-paper p-5 text-ink shadow-2xl sm:p-7">
-            <div class="flex items-start justify-between gap-4 border-b border-line pb-4">
-              <div>
-                <span class="rounded-full bg-ink px-3 py-1 text-[8px] font-black uppercase tracking-[0.14em] text-lime-soft">{{ selectedModalEvent.category }}</span>
-                <h3 class="mt-3 font-display text-2xl font-semibold leading-tight tracking-tight">{{ selectedModalEvent.title }}</h3>
-              </div>
-              <button type="button" class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-line text-muted transition-colors hover:border-ink hover:text-ink" aria-label="Tutup detail agenda" @click="closeModal">
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" />
-                </svg>
-              </button>
-            </div>
-
-            <p class="mt-4 text-sm font-medium leading-relaxed text-muted">{{ selectedModalEvent.description }}</p>
-
-            <div class="mt-5 grid gap-2 rounded-[1.2rem] border border-line bg-white p-4 text-xs font-semibold text-ink/70 sm:grid-cols-2">
-              <p><span class="block text-[8px] font-black uppercase tracking-[0.12em] text-muted">Tanggal</span>{{ formatDateBadge(selectedModalEvent.date).fullDate }}</p>
-              <p><span class="block text-[8px] font-black uppercase tracking-[0.12em] text-muted">Waktu</span>{{ formatDateBadge(selectedModalEvent.date).timeStr }}</p>
-              <p class="sm:col-span-2"><span class="block text-[8px] font-black uppercase tracking-[0.12em] text-muted">Lokasi</span>{{ selectedModalEvent.location || 'Lokasi belum ditentukan' }}</p>
-            </div>
-
-            <div v-if="selectedModalEvent.status !== 'done'" class="mt-5 space-y-3">
-              <div v-if="isRegisteredSuccess" class="rounded-[1.2rem] border border-moss/20 bg-lime/20 p-4 text-center text-xs font-bold text-forest">
-                Pendaftaran agenda berhasil dicatat. Panitia akan menghubungi Anda melalui kontak yang diberikan.
-              </div>
-              <template v-else-if="externalRegistrationUrl">
-                <div class="rounded-[1.2rem] border border-line bg-white p-4">
-                  <p class="text-[9px] font-black uppercase tracking-[0.14em] text-muted">Pendaftaran agenda</p>
-                  <p class="mt-2 text-[11px] font-semibold leading-relaxed text-ink/65">
-                    Pendaftaran agenda ini dikelola melalui formulir resmi panitia. Tombol di bawah akan membuka formulir tersebut di tab baru.
-                  </p>
-                  <a :href="externalRegistrationUrl" target="_blank" rel="noopener noreferrer" class="btn btn-ink mt-3 w-full">
-                    Buka formulir agenda
-                    <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                      <path d="M7 17L17 7M7 7h10v10" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                  </a>
-                </div>
-              </template>
-              <form v-else class="space-y-2.5" @submit.prevent="handleRegisterSubmit">
-                <p class="text-[9px] font-black uppercase tracking-[0.14em] text-muted">Daftar agenda ini</p>
-                <input v-model="regName" type="text" placeholder="Nama lengkap" class="field" required />
-                <input v-model="regEmail" type="email" placeholder="Alamat email" class="field" required />
-                <input v-model="regPhone" type="tel" placeholder="Nomor WhatsApp (opsional)" class="field" />
-                <button type="submit" :disabled="store.isRegistering" class="btn btn-ink w-full disabled:opacity-60">
-                  {{ store.isRegistering ? 'Memproses...' : 'Konfirmasi pendaftaran agenda' }}
-                </button>
-                <p v-if="store.error" class="text-[10px] font-semibold text-red-700">{{ store.error }}</p>
-              </form>
-              <p class="rounded-[0.9rem] bg-paper px-3 py-2.5 text-[9px] font-semibold leading-relaxed text-muted">
-                Ini pendaftaran untuk agenda di atas, bukan pendaftaran LK 1.
-                <RouterLink to="/daftar" class="font-black text-moss hover:text-ink" @click="closeModal">Buka Pendaftaran LK 1 →</RouterLink>
-              </p>
-            </div>
-            <div v-else class="mt-5 rounded-[1.2rem] border border-line bg-white p-4 text-center text-xs font-semibold text-muted">
-              Kegiatan ini telah selesai.
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
   </div>
 </template>
-
-<style scoped>
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 200ms ease;
-}
-.modal-enter-active > div,
-.modal-leave-active > div {
-  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease;
-}
-.modal-enter-from,
-.modal-leave-to {
-  opacity: 0;
-}
-.modal-enter-from > div,
-.modal-leave-to > div {
-  transform: translateY(16px) scale(0.98);
-  opacity: 0;
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: opacity 200ms ease, transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translate(-50%, 10px);
-}
-</style>

@@ -185,11 +185,6 @@ onUnmounted(() => {
 
           <!-- Hero Headline Container -->
           <div class="relative px-5 pt-10 pb-4 text-center sm:px-12 sm:pt-14 md:pt-16">
-            <span class="inline-flex items-center gap-2 rounded-full border border-ink/10 bg-paper-deep/80 px-3.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-muted shadow-sm backdrop-blur-sm">
-              <span class="h-1.5 w-1.5 rounded-full bg-moss" />
-              {{ displayEyebrow }} · {{ settings.chapterName || 'Insan Cita' }}
-            </span>
-
             <h1 class="mx-auto mt-4 max-w-4xl font-display text-3xl font-extrabold tracking-tight text-[#000000] sm:text-5xl md:text-6xl lg:text-[3.85rem] lg:leading-[1.14]">
               Membina Insan Cita
               <br class="hidden sm:inline" />
@@ -202,7 +197,12 @@ onUnmounted(() => {
               </span>
             </h1>
 
-            <p class="mx-auto mt-3 max-w-xl text-xs font-semibold uppercase tracking-[0.14em] text-muted sm:text-sm">
+            <p class="mx-auto mt-4 flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-[0.16em] text-muted sm:text-[10px]">
+              <span class="h-1.5 w-1.5 rounded-full bg-moss" />
+              {{ displayEyebrow }} <span class="text-moss">·</span> {{ settings.chapterName || 'Insan Cita' }}
+            </p>
+
+            <p class="mx-auto mt-2 max-w-xl text-xs font-semibold uppercase tracking-[0.14em] text-muted sm:text-sm">
               {{ displayTagline || 'Yakin Usaha Sampai · Terbinanya Insan Akademis, Pencipta, dan Pengabdi' }}
             </p>
           </div>

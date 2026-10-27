@@ -87,6 +87,23 @@ export const useEventStore = defineStore('events', () => {
     }
   }
 
+  async function fetchEventById(id: string): Promise<Event | null> {
+    isLoading.value = true
+    error.value = ''
+    try {
+      const event = await eventsService.getById(id)
+      const index = events.value.findIndex((item) => item.id === id)
+      if (index === -1) events.value.push(event)
+      else events.value[index] = event
+      return event
+    } catch (err) {
+      error.value = getErrorMessage(err, 'Agenda tidak ditemukan.')
+      return null
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   async function registerForEvent(
     eventId: string,
     input: EventRegistrationInput,
@@ -172,6 +189,7 @@ export const useEventStore = defineStore('events', () => {
     upcomingEvents,
     featuredEvent,
     fetchAll,
+    fetchEventById,
     registerForEvent,
     createEvent,
     updateEvent,

@@ -169,10 +169,10 @@ onUnmounted(() => {
 <template>
   <div class="bg-ink text-paper">
     <!-- ── 1. Hero Section (Matches referensi.jpg White Card) ─────────────────────── -->
-    <section class="relative px-3 pt-3 pb-6 sm:px-6 sm:pt-4 sm:pb-8">
-      <div class="mx-auto max-w-7xl">
+    <section class="relative flex h-[calc(100svh-var(--nav-offset))] flex-col px-3 pt-2 pb-4 sm:px-6 sm:pt-3 sm:pb-5">
+      <div class="mx-auto flex w-full max-w-7xl flex-1 flex-col">
         <!-- Main White Card -->
-        <div class="relative overflow-hidden rounded-[2.5rem] bg-[#ffffff] text-[#000000] shadow-2xl transition-all duration-300 sm:rounded-[3.5rem]">
+        <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2.5rem] bg-[#ffffff] text-[#000000] shadow-2xl transition-all duration-300 sm:rounded-[3.5rem]">
           <!-- Background subtle grid -->
           <div class="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] bg-[size:32px_32px]" />
 
@@ -184,58 +184,58 @@ onUnmounted(() => {
           </div>
 
           <!-- Hero Headline Container -->
-          <div class="relative px-5 pt-10 pb-4 text-center sm:px-12 sm:pt-14 md:pt-16">
-            <h1 class="mx-auto mt-4 max-w-4xl font-display text-3xl font-extrabold tracking-tight text-[#000000] sm:text-5xl md:text-6xl lg:text-[3.85rem] lg:leading-[1.14]">
+          <div class="relative shrink-0 px-4 pb-2 pt-6 text-center sm:px-12 sm:pt-8 lg:pt-9">
+            <h1 class="mx-auto mt-2 max-w-4xl font-display text-[clamp(1.55rem,6.5vw,2.1rem)] font-extrabold leading-[1.08] tracking-tight text-[#000000] sm:text-4xl md:text-5xl lg:text-[3.4rem] lg:leading-[1.1]">
               Membina Insan Cita
               <br class="hidden sm:inline" />
               Melalui Gagasan & Aksi Nyata
               <!-- 3 green curved lines (as in reference) -->
               <span class="inline-block translate-y-1 align-baseline text-moss sm:translate-y-2">
-                <svg class="inline-block h-6 w-8 text-[#155c17] sm:h-10 sm:w-12" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round">
+                <svg class="inline-block h-5 w-7 text-[#155c17] sm:h-9 sm:w-11" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round">
                   <path d="M6 10c6 4 14 6 20 6M6 18c6 4 14 6 20 6M6 26c6 3 14 5 20 5" />
                 </svg>
               </span>
             </h1>
 
-            <p class="mx-auto mt-4 flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-[0.16em] text-muted sm:text-[10px]">
+            <p class="mx-auto mt-2 flex items-center justify-center gap-2 text-[8px] font-black uppercase tracking-[0.16em] text-muted sm:text-[10px]">
               <span class="h-1.5 w-1.5 rounded-full bg-moss" />
               {{ displayEyebrow }} <span class="text-moss">·</span> {{ settings.chapterName || 'Insan Cita' }}
             </p>
 
-            <p class="mx-auto mt-2 max-w-xl text-xs font-semibold uppercase tracking-[0.14em] text-muted sm:text-sm">
+            <p class="mx-auto mt-1.5 max-w-xl text-[10px] font-semibold uppercase leading-relaxed tracking-[0.14em] text-muted sm:mt-2 sm:text-sm">
               {{ displayTagline || 'Yakin Usaha Sampai · Terbinanya Insan Akademis, Pencipta, dan Pengabdi' }}
             </p>
           </div>
 
           <!-- 3-Column Hero Content: Left Details - Center Photo - Right Badge -->
-          <div class="relative mt-4 grid items-end gap-6 px-6 pb-12 sm:px-12 lg:grid-cols-[1fr_1.35fr_1fr] lg:gap-8">
+          <div class="relative mt-1 flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4 sm:mt-2 sm:gap-5 sm:px-10 sm:pb-6 lg:grid lg:grid-cols-[1fr_1.35fr_1fr] lg:items-end lg:gap-8 lg:px-12 lg:pb-9">
             <!-- Left Column: Doodle Arrow, Paragraph, Button -->
-            <div class="flex flex-col items-start lg:pb-12">
+            <div class="flex shrink-0 flex-col items-start lg:pb-12">
               <!-- Green hand-drawn arrow pointing down-right -->
-              <div class="mb-3 text-[#155c17]">
-                <svg class="h-10 w-10 text-[#155c17] sm:h-12 sm:w-12" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+              <div class="mb-2 hidden text-[#155c17] sm:block">
+                <svg class="h-8 w-8 text-[#155c17] sm:h-10 sm:w-10" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M14 14c8 16 18 28 34 32" />
                   <path d="M28 48l20-2-2-20" />
                 </svg>
               </div>
 
-              <p class="max-w-xs text-xs font-medium leading-relaxed text-muted sm:text-sm">
+              <p class="line-clamp-3 max-w-xs text-[10px] font-medium leading-relaxed text-muted sm:text-xs lg:text-sm">
                 {{ displayDescription || 'Dari wacana intelektual hingga advokasi kemasyarakatan, HMI Insan Cita hadir mencetak kader beriman, berilmu, dan beramal demi terwujudnya masyarakat adil makmur.' }}
               </p>
 
               <RouterLink
                 to="/tentang"
-                class="mt-6 inline-flex items-center gap-2 rounded-full border border-line bg-white px-5 py-2.5 text-[11px] font-bold text-ink shadow-sm transition-all hover:border-ink hover:bg-ink hover:text-white"
+                class="mt-3 inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-[10px] font-bold text-ink shadow-sm transition-all hover:border-ink hover:bg-ink hover:text-white sm:mt-5 sm:px-5 sm:py-2.5 sm:text-[11px]"
               >
                 Kenal HMI Lebih Dekat
               </RouterLink>
             </div>
 
             <!-- Center Column: Realistic Portrait with Curved Oval Backdrop & Pill Button -->
-            <div class="relative mx-auto flex w-full max-w-md flex-col items-center">
-              <div class="relative aspect-[4/5] w-full overflow-hidden rounded-[2.5rem] bg-gradient-to-b from-paper-deep to-lime/10 shadow-inner">
+            <div class="relative mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col items-center lg:h-full">
+              <div class="relative min-h-[8rem] w-full flex-1 overflow-hidden rounded-[1.75rem] bg-gradient-to-b from-paper-deep to-lime/10 shadow-inner sm:rounded-[2.5rem]">
                 <!-- Decorative spiral/doodle behind person -->
-                <div class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2">
+                <div class="pointer-events-none absolute left-4 top-1/2 hidden -translate-y-1/2 sm:block">
                   <svg class="h-28 w-12 text-[#155c17]/50" viewBox="0 0 40 100" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                     <path d="M20 10c-15 10-15 20 0 30s15 20 0 30-15 20 0 30" />
                   </svg>
@@ -249,17 +249,17 @@ onUnmounted(() => {
                 />
 
                 <!-- Floating Dual Action Pill Button at bottom of photo (HMI Actions) -->
-                <div class="absolute inset-x-0 bottom-4 z-20 flex justify-center px-2">
-                  <div class="flex items-center gap-1.5 rounded-full bg-[#000000]/95 p-1.5 shadow-2xl backdrop-blur-md">
+                <div class="absolute inset-x-0 bottom-2 z-20 flex justify-center px-2 sm:bottom-4">
+                  <div class="flex items-center gap-1.5 rounded-full bg-[#000000]/95 p-1 shadow-2xl backdrop-blur-md sm:p-1.5">
                     <RouterLink
                       to="/daftar"
-                      class="rounded-full bg-[#155c17] px-4 py-2 text-[10px] font-black uppercase tracking-[0.1em] text-white shadow-sm transition-all hover:bg-[#1c7420]"
+                      class="rounded-full bg-[#155c17] px-3.5 py-1.5 text-[9px] font-black uppercase tracking-[0.1em] text-white shadow-sm transition-all hover:bg-[#1c7420] sm:px-4 sm:py-2 sm:text-[10px]"
                     >
                       Daftar LK 1
                     </RouterLink>
                     <RouterLink
                       to="/agenda"
-                      class="rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-white/80 transition-colors hover:text-white"
+                      class="rounded-full px-3.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-white/80 transition-colors hover:text-white sm:px-4 sm:py-2 sm:text-[10px]"
                     >
                       Lihat Agenda
                     </RouterLink>
@@ -269,7 +269,7 @@ onUnmounted(() => {
             </div>
 
             <!-- Right Column: 5 Stars + Years Experience -->
-            <div class="flex flex-col items-start lg:items-end lg:pb-12 lg:text-right">
+            <div class="hidden flex-col items-start lg:flex lg:items-end lg:pb-12 lg:text-right">
               <!-- 5 Green Stars -->
               <div class="flex items-center gap-1 text-[#155c17]">
                 <svg v-for="star in 5" :key="star" class="h-4 w-4 fill-[#155c17]" viewBox="0 0 24 24">
@@ -293,44 +293,44 @@ onUnmounted(() => {
         <!-- ── Stats Bar Directly Under White Card (Matches referensi.jpg 4 Columns) ──── -->
         <div
           id="stats-section"
-          class="mt-4 grid grid-cols-2 overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#000000] text-white shadow-xl sm:grid-cols-4 sm:rounded-[2.25rem]"
+          class="mt-2.5 grid shrink-0 grid-cols-4 overflow-hidden rounded-[1.25rem] border border-white/10 bg-[#000000] text-white shadow-xl sm:mt-3 sm:rounded-[1.75rem]"
         >
           <!-- Col 1: 2000+ Kader Aktif -->
-          <div class="border-b border-r border-white/10 p-5 sm:border-b-0 sm:p-7">
-            <p class="font-display text-3xl font-extrabold tracking-tight text-lime-soft sm:text-4xl md:text-5xl">
-              {{ counters.kader || '2000' }}<span class="text-2xl text-lime-soft/70 sm:text-3xl">+</span>
+          <div class="border-r border-white/10 p-2.5 sm:p-4 lg:p-5">
+            <p class="font-display text-xl font-extrabold tracking-tight text-lime-soft sm:text-3xl lg:text-4xl">
+              {{ counters.kader || '2000' }}<span class="text-base text-lime-soft/70 sm:text-2xl">+</span>
             </p>
-            <p class="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">
+            <p class="mt-1 text-[7px] font-bold uppercase leading-tight tracking-[0.12em] text-white/60 sm:mt-2 sm:text-[9px] sm:tracking-[0.16em]">
               Kader Aktif
             </p>
           </div>
 
           <!-- Col 2: 10+ Komisariat -->
-          <div class="border-b border-white/10 p-5 sm:border-b-0 sm:border-r sm:p-7">
-            <p class="font-display text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl">
-              {{ counters.komisariat || '10' }}<span class="text-2xl text-white/65 sm:text-3xl">+</span>
+          <div class="border-r border-white/10 p-2.5 sm:p-4 lg:p-5">
+            <p class="font-display text-xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
+              {{ counters.komisariat || '10' }}<span class="text-base text-white/65 sm:text-2xl">+</span>
             </p>
-            <p class="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">
+            <p class="mt-1 text-[7px] font-bold uppercase leading-tight tracking-[0.12em] text-white/60 sm:mt-2 sm:text-[9px] sm:tracking-[0.16em]">
               Komisariat & Rayon
             </p>
           </div>
 
           <!-- Col 3: 800+ Kajian & Pelatihan -->
-          <div class="border-r border-white/10 p-5 sm:p-7">
-            <p class="font-display text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl">
-              {{ counters.alumni || '800' }}<span class="text-2xl text-white/65 sm:text-3xl">+</span>
+          <div class="border-r border-white/10 p-2.5 sm:p-4 lg:p-5">
+            <p class="font-display text-xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
+              {{ counters.alumni || '800' }}<span class="text-base text-white/65 sm:text-2xl">+</span>
             </p>
-            <p class="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">
+            <p class="mt-1 text-[7px] font-bold uppercase leading-tight tracking-[0.12em] text-white/60 sm:mt-2 sm:text-[9px] sm:tracking-[0.16em]">
               Kajian & Pelatihan
             </p>
           </div>
 
           <!-- Col 4: 77+ Tahun Pengabdian -->
-          <div class="p-5 sm:p-7">
-            <p class="font-display text-3xl font-extrabold tracking-tight text-white sm:text-4xl md:text-5xl">
-              77<span class="text-2xl text-lime-soft/70 sm:text-3xl">+</span>
+          <div class="p-2.5 sm:p-4 lg:p-5">
+            <p class="font-display text-xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
+              77<span class="text-base text-lime-soft/70 sm:text-2xl">+</span>
             </p>
-            <p class="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/60">
+            <p class="mt-1 text-[7px] font-bold uppercase leading-tight tracking-[0.12em] text-white/60 sm:mt-2 sm:text-[9px] sm:tracking-[0.16em]">
               Tahun Pengabdian
             </p>
           </div>

@@ -456,7 +456,6 @@ watch(eventId, loadEvent, { immediate: true })
               <a
                 v-if="event.meetingUrl"
                 :href="event.meetingUrl"
-                target="_blank"
                 rel="noopener noreferrer"
                 class="btn btn-ink mt-5 w-full"
               >
@@ -505,11 +504,10 @@ watch(eventId, loadEvent, { immediate: true })
               <template v-else-if="externalRegistrationUrl">
                 <p class="mt-5 text-xs font-medium leading-relaxed text-white/55">
                   Pendaftaran agenda ini dikelola melalui formulir resmi panitia. Tombol di bawah akan
-                  membuka formulir tersebut di tab baru.
+                  membuka formulir tersebut di tab yang sama.
                 </p>
                 <a
                   :href="externalRegistrationUrl"
-                  target="_blank"
                   rel="noopener noreferrer"
                   class="btn btn-lime mt-4 w-full"
                 >

@@ -29,7 +29,6 @@ const displayTitle = computed(
 const displayEyebrow = computed(
   () => home.value.hero.eyebrow || settings.value.organizationShortName || 'Himpunan Mahasiswa Islam',
 )
-const displayTagline = computed(() => home.value.hero.tagline || settings.value.tagline)
 const displayDescription = computed(() => home.value.hero.description || settings.value.description)
 const heroImage = computed(() => home.value.hero.backgroundImage || '/images/hero_student.jpg')
 const foundedYear = computed(() => stats.value?.yearFounded || settings.value.yearFounded || 1947)

@@ -8,13 +8,11 @@ import type {
   EventRegistrationInput,
   EventSummary,
   PastEventPhoto,
-  Speaker,
   Testimonial,
 } from '@/types'
 
 export const useEventStore = defineStore('events', () => {
   const events = ref<Event[]>([])
-  const speakers = ref<Speaker[]>([])
   const pastGallery = ref<PastEventPhoto[]>([])
   const testimonials = ref<Testimonial[]>([])
   const summary = ref<EventSummary | null>(null)
@@ -65,21 +63,19 @@ export const useEventStore = defineStore('events', () => {
 
   let loaded = false
 
-  /** Muat seluruh data agenda + narasumber + testimoni dalam satu alur. */
+  /** Muat seluruh data agenda + testimoni dalam satu alur. */
   async function fetchAll(force = false) {
     if (loaded && !force) return
     isLoading.value = true
     error.value = ''
     try {
-      const [eventPage, speakerList, testimonialList, summaryData, pastHighlights] = await Promise.all([
+      const [eventPage, testimonialList, summaryData, pastHighlights] = await Promise.all([
         eventsService.list({ perPage: 100 }),
-        eventsService.listSpeakers(),
         eventsService.listTestimonials(),
         eventsService.getSummary(),
         eventsService.listPastHighlights(),
       ])
       events.value = eventPage.items
-      speakers.value = speakerList
       testimonials.value = testimonialList
       summary.value = summaryData
       pastGallery.value = pastHighlights
@@ -160,7 +156,6 @@ export const useEventStore = defineStore('events', () => {
 
   return {
     events,
-    speakers,
     pastGallery,
     testimonials,
     summary,

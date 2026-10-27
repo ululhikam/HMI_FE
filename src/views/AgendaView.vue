@@ -41,7 +41,6 @@ function statusLabel(status: Event['status']) {
 const summaryStats = computed(() => {
   const summary = store.summary
   return [
-    { label: 'Pemateri', value: summary ? `${summary.speakers}+` : '—' },
     { label: 'Peserta', value: summary ? `${summary.participants}+` : '—' },
     { label: 'Sesi kaji', value: summary ? `${summary.sessions}+` : '—' },
     { label: 'Alumni', value: summary ? `${summary.alumni}+` : '—' },
@@ -364,7 +363,7 @@ onUnmounted(() => {
             <p class="mt-5 max-w-xl text-sm font-medium leading-relaxed text-muted sm:text-base">
               {{ featuredEvent?.description || 'Deskripsi agenda belum tersedia. Silakan lihat daftar agenda untuk informasi kegiatan terbaru.' }}
             </p>
-            <div class="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div class="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div v-for="stat in summaryStats" :key="stat.label" class="rounded-[1.2rem] border border-line bg-white p-4">
                 <p class="font-display text-2xl font-bold leading-none text-moss">{{ stat.value }}</p>
                 <p class="mt-2 text-[8px] font-black uppercase tracking-[0.14em] text-muted">{{ stat.label }}</p>
@@ -389,54 +388,6 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- Speakers -->
-    <section class="section-pad bg-paper">
-      <div class="container-wide">
-        <div class="flex flex-col justify-between gap-4 border-b border-line pb-6 sm:flex-row sm:items-end">
-          <div>
-            <span class="eyebrow">Narasumber</span>
-            <h2 class="display-md mt-4">Yang membagikan<span class="text-moss">.</span></h2>
-          </div>
-          <span class="text-[9px] font-bold uppercase tracking-[0.14em] text-muted">{{ store.speakers.length }} pemateri</span>
-        </div>
-
-        <div v-if="store.speakers.length" class="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div
-            v-for="(speaker, index) in store.speakers"
-            :key="speaker.id"
-            v-reveal="{ delay: index * 60 }"
-            class="group rounded-[1.5rem] border border-line bg-white p-4 transition duration-300 hover:-translate-y-1 hover:border-ink/30 hover:shadow-soft"
-          >
-            <div class="relative aspect-[4/4.4] overflow-hidden rounded-[1.2rem] bg-paper-deep">
-              <img
-                v-if="speaker.avatar"
-                :src="speaker.avatar"
-                :alt="speaker.name"
-                class="h-full w-full object-cover grayscale transition duration-700 group-hover:scale-105 group-hover:grayscale-0"
-              />
-              <span v-else class="flex h-full w-full items-center justify-center font-display text-4xl font-bold text-moss/40">
-                {{ initials(speaker.name) }}
-              </span>
-              <span class="absolute left-3 top-3 rounded-full bg-paper/90 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.1em] text-ink backdrop-blur">
-                Pemateri
-              </span>
-            </div>
-            <div class="p-2 pt-4">
-              <h3 class="font-display text-base font-semibold leading-snug tracking-tight text-ink">{{ speaker.name }}</h3>
-              <p class="mt-1 text-[10px] font-extrabold uppercase tracking-[0.08em] text-moss">{{ speaker.role }}</p>
-              <p class="mt-1 text-[10px] font-semibold text-muted">{{ speaker.institution }}</p>
-            </div>
-          </div>
-        </div>
-        <EmptyState
-          v-else
-          class="mt-8"
-          title="Narasumber belum tersedia"
-          description="Data pemateri akan tampil setelah dilengkapi pada agenda."
-        />
       </div>
     </section>
 

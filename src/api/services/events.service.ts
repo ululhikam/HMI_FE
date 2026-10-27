@@ -9,7 +9,6 @@ import type {
   EventStatus,
   EventSummary,
   PastEventPhoto,
-  Speaker,
   Testimonial,
 } from '@/types'
 
@@ -48,10 +47,6 @@ export const eventsService = {
 
   getSummary(): Promise<EventSummary> {
     return http.get<EventSummary>(endpoints.events.summary)
-  },
-
-  listSpeakers(): Promise<Speaker[]> {
-    return http.get<Speaker[]>(endpoints.events.speakers)
   },
 
   listTestimonials(): Promise<Testimonial[]> {

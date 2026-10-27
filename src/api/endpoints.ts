@@ -36,7 +36,6 @@ export const endpoints = {
     pastHighlights: '/events/past-highlights',
     detail: (eventId: string) => `/events/${id(eventId)}`,
     registrations: (eventId: string) => `/events/${id(eventId)}/registrations`,
-    speakers: '/speakers',
     testimonials: '/testimonials',
   },
   eventRegistrations: {

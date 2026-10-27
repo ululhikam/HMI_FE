@@ -136,6 +136,12 @@ const router = createRouter({
           component: () => import('@/views/admin/MembersAdminView.vue'),
           meta: { title: 'Kelola Pengurus | Admin HMI' },
         },
+        {
+          path: 'kelola-admin',
+          name: 'admin-users',
+          component: () => import('@/views/admin/AdminUsersView.vue'),
+          meta: { title: 'Kelola Admin | Admin HMI', requiresSuperadmin: true },
+        },
       ],
     },
     // ── 404 ────────────────────────────────────────────────────
@@ -160,6 +166,11 @@ router.beforeEach((to, _from) => {
   // Protect admin routes
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  // Route khusus superadmin
+  if (to.meta.requiresSuperadmin && auth.currentUser?.role !== 'superadmin') {
+    return { name: 'admin-dashboard' }
   }
 
   // Redirect authenticated users away from login

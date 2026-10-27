@@ -1,4 +1,6 @@
 export { authService } from './auth.service'
+export { adminUsersService } from './adminUsers.service'
+export type { AdminUserListQuery } from './adminUsers.service'
 export { articlesService, commentsService } from './articles.service'
 export type { ArticleListQuery } from './articles.service'
 export { eventsService } from './events.service'

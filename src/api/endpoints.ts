@@ -12,6 +12,11 @@ export const endpoints = {
     me: '/auth/me',
     refresh: '/auth/refresh',
   },
+  adminUsers: {
+    list: '/admin-users',
+    detail: (adminId: string) => `/admin-users/${id(adminId)}`,
+    resetPassword: (adminId: string) => `/admin-users/${id(adminId)}/reset-password`,
+  },
   articles: {
     list: '/articles',
     detail: (articleSlug: string) => `/articles/${slug(articleSlug)}`,

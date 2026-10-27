@@ -12,55 +12,91 @@ const router = useRouter()
 const isSidebarOpen = ref(true)
 const isMobileOpen = ref(false)
 
-const navItems = [
-  {
-    label: 'Dashboard',
-    to: '/admin/dashboard',
-    icon: 'dashboard',
-    paths: ['M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z'],
-  },
-  {
-    label: 'Berita',
-    to: '/admin/berita',
-    icon: 'newspaper',
-    paths: ['M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z'],
-  },
-  {
-    label: 'Agenda',
-    to: '/admin/agenda',
-    icon: 'calendar',
-    paths: ['M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'],
-  },
-  {
-    label: 'Pendaftar Agenda',
-    to: '/admin/pendaftar-agenda',
-    icon: 'clipboard-check',
-    paths: ['M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4'],
-  },
-  {
-    label: 'Galeri',
-    to: '/admin/galeri',
-    icon: 'photo',
-    paths: ['M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'],
-  },
-  {
-    label: 'Pendaftar LK 1',
-    to: '/admin/pendaftar',
-    icon: 'clipboard',
-    paths: ['M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'],
-  },
-  {
-    label: 'Pengurus',
-    to: '/admin/pengurus',
-    icon: 'users',
-    paths: ['M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z'],
-  },
-]
+const navGroups = computed(() => {
+  const groups = [
+    {
+      label: 'Ringkasan',
+      items: [
+        {
+          label: 'Dashboard',
+          to: '/admin/dashboard',
+          paths: ['M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z'],
+        },
+      ],
+    },
+    {
+      label: 'Konten',
+      items: [
+        {
+          label: 'Berita',
+          to: '/admin/berita',
+          paths: ['M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z'],
+        },
+        {
+          label: 'Agenda',
+          to: '/admin/agenda',
+          paths: ['M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'],
+        },
+        {
+          label: 'Galeri',
+          to: '/admin/galeri',
+          paths: ['M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'],
+        },
+      ],
+    },
+    {
+      label: 'Pendaftaran',
+      items: [
+        {
+          label: 'Pendaftar LK 1',
+          to: '/admin/pendaftar',
+          paths: ['M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'],
+        },
+        {
+          label: 'Pendaftar Agenda',
+          to: '/admin/pendaftar-agenda',
+          paths: ['M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4'],
+        },
+      ],
+    },
+    {
+      label: 'Organisasi',
+      items: [
+        {
+          label: 'Pengurus',
+          to: '/admin/pengurus',
+          paths: ['M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z'],
+        },
+      ],
+    },
+  ]
+
+  if (auth.currentUser?.role === 'superadmin') {
+    groups.push({
+      label: 'Sistem',
+      items: [
+        {
+          label: 'Kelola Admin',
+          to: '/admin/kelola-admin',
+          paths: ['M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z'],
+        },
+      ],
+    })
+  }
+
+  return groups
+})
+
+const visibleNavItems = computed(() => navGroups.value.flatMap((group) => group.items))
+
+function isActivePath(path: string, target: string) {
+  return path === target || path.startsWith(`${target}/`)
+}
 
 const currentLabel = computed(() => {
   if (route.path === '/admin/berita/baru') return 'Tulis berita'
   if (route.path.startsWith('/admin/berita/')) return 'Editor berita'
-  const active = navItems.find((item) => route.path.startsWith(item.to))
+  const active = visibleNavItems.value.find((item) => isActivePath(route.path, item.to))
   return active?.label ?? 'Dashboard'
 })
 
@@ -159,25 +195,32 @@ onUnmounted(() => {
 
       <!-- Nav -->
       <nav class="flex-1 overflow-y-auto px-3 py-5" aria-label="Navigasi admin">
-        <div v-if="showLabels" class="mb-2 flex items-center gap-2 px-2">
-          <span class="h-1 w-1 rounded-full bg-lime-soft" />
-          <span class="text-[7px] font-black uppercase tracking-[0.2em] text-white/60">Ruang kerja</span>
-        </div>
-        <div class="space-y-1">
-          <RouterLink
-            v-for="item in navItems"
-            :key="item.to"
-            :to="item.to"
-            :title="!showLabels ? item.label : undefined"
-            class="admin-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-white/60 transition-all duration-200 hover:bg-white/5 hover:text-white"
-          >
-            <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center">
-              <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path v-for="(path, index) in item.paths" :key="index" :d="path" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </span>
-            <span v-if="showLabels" class="flex-1 truncate text-[11px] font-extrabold uppercase tracking-[0.08em]">{{ item.label }}</span>
-          </RouterLink>
+        <div
+          v-for="(group, groupIndex) in navGroups"
+          :key="group.label"
+          :class="groupIndex > 0 ? 'mt-5' : ''"
+        >
+          <div v-if="showLabels" class="mb-2 flex items-center gap-2 px-2">
+            <span class="h-1 w-1 rounded-full bg-lime-soft" />
+            <span class="text-[7px] font-black uppercase tracking-[0.2em] text-white/60">{{ group.label }}</span>
+          </div>
+          <div v-else-if="groupIndex > 0" class="mx-2 mb-2 h-px bg-white/10" />
+          <div class="space-y-1">
+            <RouterLink
+              v-for="item in group.items"
+              :key="item.to"
+              :to="item.to"
+              :title="!showLabels ? item.label : undefined"
+              class="admin-nav-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-white/60 transition-all duration-200 hover:bg-white/5 hover:text-white"
+            >
+              <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center">
+                <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path v-for="(path, index) in item.paths" :key="index" :d="path" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span v-if="showLabels" class="flex-1 truncate text-[11px] font-extrabold uppercase tracking-[0.08em]">{{ item.label }}</span>
+            </RouterLink>
+          </div>
         </div>
 
         <!-- Quick create -->

@@ -168,8 +168,8 @@ onUnmounted(() => {
 <template>
   <div class="bg-ink text-paper">
     <!-- ── 1. Hero Section (Matches referensi.jpg White Card) ─────────────────────── -->
-    <section class="relative flex flex-col justify-start px-3 pt-3 pb-6 sm:px-6 sm:pt-4 sm:pb-8 lg:min-h-[calc(100svh-var(--nav-offset))] lg:px-8">
-      <div class="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-between gap-4 sm:gap-6">
+    <section class="relative flex flex-col justify-start px-3 pt-3 pb-6 sm:px-6 sm:pt-4 sm:pb-8 lg:min-h-[calc(100svh-var(--nav-offset))] lg:px-8 lg:pb-5">
+      <div class="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-between gap-4 sm:gap-6 lg:gap-4">
         <!-- Main White Card -->
         <div class="relative flex flex-col justify-between overflow-hidden rounded-[2.25rem] bg-[#ffffff] text-[#000000] shadow-2xl transition-all duration-300 sm:rounded-[3.25rem] lg:flex-1">
           <!-- Background subtle grid -->
@@ -228,7 +228,7 @@ onUnmounted(() => {
 
             <!-- Center Column: Realistic Portrait with Curved Oval Backdrop & Pill Button -->
             <div class="relative mx-auto flex w-full max-w-[280px] sm:max-w-[340px] lg:max-w-[380px] flex-col items-center">
-              <div class="relative w-full overflow-hidden rounded-t-[2.5rem] rounded-b-[1.75rem] bg-gradient-to-b from-[#f3eee7] via-[#ebf2ea] to-[#e1eee0] shadow-md h-[270px] sm:h-[340px] md:h-[380px] lg:h-[410px]">
+              <div class="relative w-full overflow-hidden rounded-t-[2.5rem] rounded-b-[1.75rem] bg-gradient-to-b from-[#f3eee7] via-[#ebf2ea] to-[#e1eee0] shadow-md h-[clamp(10rem,32svh,17rem)] sm:h-[clamp(15rem,34svh,21.25rem)] md:h-[clamp(16rem,36svh,23.75rem)] lg:h-[clamp(15rem,39svh,25.625rem)]">
                 <!-- Decorative spiral/doodle behind person -->
                 <div class="pointer-events-none absolute left-3 top-1/2 hidden -translate-y-1/2 sm:block">
                   <svg class="h-28 w-12 text-[#155c17]/35" viewBox="0 0 40 100" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -263,7 +263,7 @@ onUnmounted(() => {
               </div>
 
               <!-- Mobile/Tablet short note directly under photo -->
-              <p class="mt-3 line-clamp-3 max-w-sm text-center text-xs font-medium leading-relaxed text-muted lg:hidden">
+              <p class="mt-3 line-clamp-2 max-w-sm text-center text-xs font-medium leading-relaxed text-muted sm:line-clamp-3 lg:hidden">
                 {{ displayDescription || 'Dari wacana intelektual hingga advokasi kemasyarakatan, HMI Insan Cita hadir mencetak kader beriman, berilmu, dan beramal demi terwujudnya masyarakat adil makmur.' }}
               </p>
             </div>
@@ -296,7 +296,7 @@ onUnmounted(() => {
           class="grid shrink-0 grid-cols-2 gap-px overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#000000] text-white shadow-xl sm:grid-cols-4 sm:rounded-[2rem]"
         >
           <!-- Col 1: 2000+ Kader Aktif -->
-          <div class="border-b border-r border-white/10 p-3.5 text-center sm:border-b-0 sm:p-5 lg:p-6 sm:text-left">
+          <div class="border-b border-r border-white/10 p-2.5 text-center sm:border-b-0 sm:p-5 lg:p-4 sm:text-left">
             <p class="font-display text-2xl font-extrabold tracking-tight text-lime-soft sm:text-3xl lg:text-4xl">
               {{ counters.kader || '2000' }}<span class="text-base text-lime-soft/70 sm:text-2xl">+</span>
             </p>
@@ -306,7 +306,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Col 2: 10+ Komisariat -->
-          <div class="border-b border-white/10 p-3.5 text-center sm:border-b-0 sm:border-r sm:p-5 lg:p-6 sm:text-left">
+          <div class="border-b border-white/10 p-2.5 text-center sm:border-b-0 sm:border-r sm:p-5 lg:p-4 sm:text-left">
             <p class="font-display text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
               {{ counters.komisariat || '10' }}<span class="text-base text-white/65 sm:text-2xl">+</span>
             </p>
@@ -316,7 +316,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Col 3: 800+ Kajian & Pelatihan -->
-          <div class="border-r border-white/10 p-3.5 text-center sm:p-5 lg:p-6 sm:text-left">
+          <div class="border-r border-white/10 p-2.5 text-center sm:p-5 lg:p-4 sm:text-left">
             <p class="font-display text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
               {{ counters.alumni || '800' }}<span class="text-base text-white/65 sm:text-2xl">+</span>
             </p>
@@ -326,7 +326,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Col 4: 77+ Tahun Pengabdian -->
-          <div class="p-3.5 text-center sm:p-5 lg:p-6 sm:text-left">
+          <div class="p-2.5 text-center sm:p-5 lg:p-4 sm:text-left">
             <p class="font-display text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-4xl">
               77<span class="text-base text-lime-soft/70 sm:text-2xl">+</span>
             </p>
